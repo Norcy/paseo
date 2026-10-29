@@ -4,6 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Archive, MessageCircle, MoreVertical, Pencil, Plus } from "lucide-react-native";
 import { useAgentDescriptor } from "@/agent-presentation";
 import { StatusIcon } from "@/components/status-icon";
+import { ProjectLeadingVisual } from "@/components/sidebar/project-leading-visual";
+import { useProjectIcons } from "@/projects/icons";
+import type { ProjectIconTarget } from "@/projects/icon-target";
 import { ScrollView, Text, View } from "react-native";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { useTranslation } from "react-i18next";
@@ -17,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
+import { confirmDialog } from "@/utils/confirm-dialog";
 import {
   navigateToWorkspace,
   useActiveWorkspaceSelection,
@@ -26,7 +30,7 @@ import { useSessionStore, type Agent } from "@/stores/session-store";
 const renameIcon = <DensityIcon icon={Pencil} size="xs" color="foregroundMuted" />;
 const archiveIcon = <DensityIcon icon={Archive} size="xs" color="foregroundMuted" />;
 
-interface ConversationGroup {
+interface ConversationGroup extends ProjectIconTarget {
   id: string;
   serverId: string;
   projectId: string;
@@ -48,10 +52,15 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
       for (const workspace of session.workspaces.values()) {
         const id = `${serverId}:${workspace.projectId}`;
         if (!byProject.has(id)) {
+          const project = session.projects.get(workspace.projectId);
           byProject.set(id, {
             id,
+            projectViewKey: id,
             serverId,
             projectId: workspace.projectId,
+            iconWorkingDir: workspace.projectRootPath,
+            customIconRevision: workspace.projectCustomIconRevision,
+            iconRevision: project?.projectIconRevision,
             title: workspace.projectCustomName || workspace.projectDisplayName,
             sourceDirectory: workspace.projectRootPath,
             entries: [],
@@ -70,6 +79,7 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
       return group;
     });
   }, [sessions]);
+  const projectIcons = useProjectIcons({ projects: groups });
   const emptyLabel = t("sidebar.empty.noConversations", "No conversations yet");
   const newLabel = t("sidebar.actions.newConversation", "New conversation");
 
@@ -81,7 +91,12 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
         ) : (
           groups.map((group) => (
             <View key={group.id} style={styles.group}>
-              <ProjectGroupHeader group={group} newLabel={newLabel} onSelect={onSelect} />
+              <ProjectGroupHeader
+                group={group}
+                iconDataUri={projectIcons.get(group.projectViewKey) ?? null}
+                newLabel={newLabel}
+                onSelect={onSelect}
+              />
               {group.entries.map((agent) => {
                 const active = selection?.serverId === agent.serverId && activeAgentId === agent.id;
                 return (
@@ -104,10 +119,12 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
 
 function ProjectGroupHeader({
   group,
+  iconDataUri,
   newLabel,
   onSelect,
 }: {
   group: ConversationGroup;
+  iconDataUri: string | null;
   newLabel: string;
   onSelect: () => void;
 }) {
@@ -126,6 +143,13 @@ function ProjectGroupHeader({
 
   return (
     <View style={styles.groupHeader}>
+      <ProjectLeadingVisual
+        displayName={group.title}
+        iconDataUri={iconDataUri}
+        projectViewKey={group.projectViewKey}
+        statusBucket={null}
+        backdrop="surfaceSidebar"
+      />
       <Text numberOfLines={1} style={styles.groupTitle}>
         {group.title}
       </Text>
@@ -174,8 +198,22 @@ function ConversationRow({
   }, [agent, onSelect]);
   const handleRename = useCallback(() => setRenaming(true), []);
   const handleArchive = useCallback(() => {
-    void archiveAgent({ serverId: agent.serverId, agentId: agent.id });
-  }, [agent.id, agent.serverId, archiveAgent]);
+    void (async () => {
+      if (
+        agent.status === "running" &&
+        !(await confirmDialog({
+          title: t("workspace.tabs.confirmations.archiveRunningAgentTitle"),
+          message: t("workspace.tabs.confirmations.archiveRunningAgentMessage"),
+          confirmLabel: t("workspace.tabs.confirmations.archive"),
+          cancelLabel: t("workspace.tabs.confirmations.cancel"),
+          destructive: true,
+        }))
+      ) {
+        return;
+      }
+      await archiveAgent({ serverId: agent.serverId, agentId: agent.id });
+    })().catch(() => {});
+  }, [agent.id, agent.serverId, agent.status, archiveAgent, t]);
   const handleRenameClose = useCallback(() => setRenaming(false), []);
   const handleRenameSubmit = useCallback(
     async (title: string) => {
@@ -224,7 +262,7 @@ function ConversationRow({
             <DropdownMenuItem leading={renameIcon} onSelect={handleRename}>
               {t("workspace.tabs.menu.renameAgent")}
             </DropdownMenuItem>
-            <DropdownMenuItem leading={archiveIcon} onSelect={handleArchive}>
+            <DropdownMenuItem leading={archiveIcon} onSelect={handleArchive} disabled={!client}>
               {t("agentList.archiveSheet.archive")}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -260,7 +298,7 @@ const styles = StyleSheet.create((theme) => ({
   groupHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing[1],
+    gap: theme.spacing[2],
     paddingLeft: theme.spacing[2],
     marginBottom: theme.spacing[1],
   },
