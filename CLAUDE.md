@@ -140,6 +140,8 @@ release builds in a short-lived release workspace from `origin/main` or a releas
   - `npm run build:server` — rebuild highlight, relay, protocol, client, server, and CLI when server/CLI types may be stale.
   - Do not patch inferred callback parameters or add local duplicate types just to silence stale declaration errors.
 - **Run `npm run format` before committing.** This repo uses Biome for formatting. Do not manually fix formatting — let the formatter handle it.
+- Keep commits small and grouped by one coherent change. Stage and commit each independently reviewable batch separately; do not mix unrelated fixes or existing staged work.
+- Finish all requested changes before the final Android build and install; build and install once after the full change set is ready.
 - **Always use npm scripts for linting and formatting.** Do not run tools directly with `npx eslint`, `npx oxfmt`, `npx oxlint`, or package-local binaries. For targeted checks, pass file paths through the npm script:
   - `npm run lint -- packages/app/src/components/message.tsx`
   - `npm run format:files -- CLAUDE.md packages/app/src/components/message.tsx`
