@@ -32,7 +32,7 @@ import {
 } from "react";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useIsFocused } from "expo-router/react-navigation";
-import { BackHandler, Text, View } from "react-native";
+import { BackHandler, Platform, Text, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
@@ -46,10 +46,7 @@ import { ScreenHeader } from "@/components/headers/screen-header";
 import { MenuHeader } from "@/components/headers/menu-header";
 import { FloatingHeaderLayout } from "@/components/floating-header";
 import { StreamTopOverlayProvider, supportsStreamTopOverlay } from "@/agent-stream/top-overlay";
-import {
-  CompactWorkspaceHeader,
-  MobileWorkspaceTabSwitcher,
-} from "@/screens/workspace/compact-workspace-header";
+import { CompactWorkspaceHeader } from "@/screens/workspace/compact-workspace-header";
 import { WorkspaceHeaderProjectRow } from "@/screens/workspace/workspace-header-project-row";
 import { ScreenTitle } from "@/components/headers/screen-title";
 import {
@@ -679,6 +676,31 @@ function getHostDisplayName(host: { label?: string | null } | null, fallback: st
   return trimmed ? trimmed : fallback;
 }
 
+function getAgentIdFromTabTarget(target: WorkspaceTabTarget | undefined): string | null {
+  return target?.kind === "agent" ? target.agentId : null;
+}
+
+function getActiveConversationAgentId(
+  tab: { descriptor: { target: WorkspaceTabTarget } } | null | undefined,
+): string | null {
+  return tab ? getAgentIdFromTabTarget(tab.descriptor.target) : null;
+}
+
+function resolveAgentTitle(
+  agents: Map<string, { title: string | null }> | undefined,
+  agentId: string | null,
+): string | null {
+  return agentId ? (agents?.get(agentId)?.title?.trim() ?? null) : null;
+}
+
+function useCompactConversationTitle(
+  serverId: string,
+  tab: { descriptor: { target: WorkspaceTabTarget } } | null | undefined,
+): string | null {
+  const agentId = getActiveConversationAgentId(tab);
+  return useSessionStore((state) => resolveAgentTitle(state.sessions[serverId]?.agents, agentId));
+}
+
 function useWorkspaceRouteActions(normalizedServerId: string): {
   handleRetryHost: () => void;
   handleManageHost: () => void;
@@ -1019,6 +1041,14 @@ function useLastMainPane(input: {
     lastMainPaneRef.current.paneId = focusedPaneId;
   }
   return lastMainPaneRef;
+}
+
+function resolveCompactConversationTitle(
+  platform: string,
+  conversationTitle: string | null,
+  workspaceTitle: string,
+): string {
+  return platform === "android" && conversationTitle ? conversationTitle : workspaceTitle;
 }
 
 function WorkspaceScreenContent({
@@ -1569,6 +1599,7 @@ function WorkspaceScreenContent({
 
   const activeTabId = focusedPaneTabState.activeTabId;
   const activeTab = focusedPaneTabState.activeTab;
+  const activeConversationTitle = useCompactConversationTitle(normalizedServerId, activeTab);
 
   const tabs = useMemo<WorkspaceTabDescriptor[]>(
     () => focusedPaneTabState.tabs.map((tab) => tab.descriptor),
@@ -1793,7 +1824,6 @@ function WorkspaceScreenContent({
     ? t("workspace.tabs.explorerSidebar.close")
     : t("workspace.tabs.explorerSidebar.open");
 
-  const activeTabKey = useMemo(() => activeTabId ?? "", [activeTabId]);
   const handleCreateDraftTab = useCallback(
     (input?: { paneId?: string }) => {
       openWorkspaceDraftTab({ paneId: input?.paneId });
@@ -1895,13 +1925,6 @@ function WorkspaceScreenContent({
     workspaceLayout,
     openUrl: handleOpenUrlInBrowserTab,
   });
-
-  const handleSelectSwitcherTab = useCallback(
-    (key: string) => {
-      navigateToTabId(key);
-    },
-    [navigateToTabId],
-  );
 
   // The new pane opens empty and the user picks what goes in it from the launcher.
   // Seeding a draft here guessed for them, and guessed "new agent" every time.
@@ -3380,7 +3403,11 @@ function WorkspaceScreenContent({
       isMobile ? (
         <CompactWorkspaceHeader
           isLoading={isWorkspaceHeaderLoading}
-          title={workspaceHeaderTitle}
+          title={resolveCompactConversationTitle(
+            Platform.OS,
+            activeConversationTitle,
+            workspaceHeaderTitle,
+          )}
           subtitle={workspaceHeaderSubtitle}
           isSubtitleDistinct={isWorkspaceHeaderSubtitleDistinct}
           serverId={normalizedServerId}
@@ -3388,26 +3415,6 @@ function WorkspaceScreenContent({
           explorerToggleLabel={explorerSidebarToggleLabel}
           explorerToggleAccessibilityState={explorerSidebarToggleAccessibilityState}
         >
-          <MobileWorkspaceTabSwitcher
-            tabs={tabs}
-            activeTabKey={activeTabKey}
-            normalizedServerId={normalizedServerId}
-            normalizedWorkspaceId={normalizedWorkspaceId}
-            onSelectSwitcherTab={handleSelectSwitcherTab}
-            createTerminalDisabled={createTerminalDisabled}
-            onCreateDraftTab={handleCreateDraftTab}
-            onCreateTerminal={handleCreateTerminal}
-            onCopyResumeCommand={handleCopyResumeCommand}
-            onCopyAgentId={handleCopyAgentId}
-            onCopyTerminalId={handleCopyTerminalId}
-            onCopyFilePath={handleCopyFilePath}
-            onReloadAgent={handleReloadAgent}
-            onRenameTab={handleRenameTab}
-            onCloseTab={handleCloseTabById}
-            onCloseTabsAbove={handleCloseTabsToLeft}
-            onCloseTabsBelow={handleCloseTabsToRight}
-            onCloseOtherTabs={handleCloseOtherTabs}
-          />
           <WorkspaceHeaderMenuMobile
             normalizedServerId={normalizedServerId}
             normalizedWorkspaceId={normalizedWorkspaceId}
@@ -3428,31 +3435,18 @@ function WorkspaceScreenContent({
         </CompactWorkspaceHeader>
       ) : null,
     [
-      activeTabKey,
+      activeConversationTitle,
       canOpenImportSheet,
       compactHeaderScripts,
       createTerminalDisabled,
       currentBranchName,
       explorerSidebarToggleAccessibilityState,
       explorerSidebarToggleLabel,
-      handleCloseOtherTabs,
-      handleCloseTabById,
-      handleCloseTabsToLeft,
-      handleCloseTabsToRight,
-      handleCopyAgentId,
       handleCopyBranchName,
-      handleCopyFilePath,
-      handleCopyResumeCommand,
-      handleCopyTerminalId,
       handleCopyWorkspacePath,
       handleCreateBrowserTab,
-      handleCreateDraftTab,
-      handleCreateTerminal,
       handleCreateTerminalWithProfile,
       handleOpenSetupTab,
-      handleReloadAgent,
-      handleRenameTab,
-      handleSelectSwitcherTab,
       handleToggleExplorerSidebar,
       isMobile,
       isWorkspaceHeaderLoading,
@@ -3462,7 +3456,6 @@ function WorkspaceScreenContent({
       openImportSheet,
       showCreateBrowserTab,
       showWorkspaceSetup,
-      tabs,
       workspaceDirectory,
       workspaceHeaderSubtitle,
       workspaceHeaderTitle,
