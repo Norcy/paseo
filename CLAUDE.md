@@ -15,6 +15,12 @@ This is an npm workspace monorepo:
 - `packages/desktop` — Electron desktop wrapper
 - `packages/website` — Marketing site (paseo.sh)
 
+## Custom change log
+
+- Android sidebar: conversations from all projects, per-project new conversation, status indicators, and per-conversation archive/rename actions.
+- Android chat: hide workspace tabs and show the active conversation title.
+- Android composer: keep the original input width, scroll queued messages in a bounded area, and hide voice controls.
+
 ## Docs
 
 `docs/` is the source of truth for system-level and process-level knowledge. **"The docs", "check the docs", or "check the X docs" always mean this directory — not the web.** Look here before fetching anything online; the docs capture gotchas and conventions you cannot derive from the code or external sources.
