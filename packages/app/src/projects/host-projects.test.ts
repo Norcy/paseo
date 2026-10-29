@@ -1,4 +1,7 @@
-import { describe, expect, test } from "vitest";
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import type { WorkspaceDescriptorPayload } from "@getpaseo/protocol/messages";
+import { ensureDefaultWorkspace } from "./default-workspace";
+import { describe, expect, test, vi } from "vitest";
 import type { HostProjectListItem } from "./host-project-model";
 import {
   canCreateWorkspaceForHostProject,
@@ -160,5 +163,100 @@ describe("host project lookups", () => {
       projectKey: "remote:github.com/acme/app",
       hosts: [{ serverId: "host-a", projectId: "project-a" }],
     });
+  });
+});
+
+describe("default conversation workspace", () => {
+  const conversationProject = { projectId: "project-a", projectRootPath: "/repo/app" };
+  function workspace(
+    id: string,
+    overrides: Partial<WorkspaceDescriptorPayload> = {},
+  ): WorkspaceDescriptorPayload {
+    return {
+      id,
+      ...conversationProject,
+      projectDisplayName: "App",
+      workspaceDirectory: conversationProject.projectRootPath,
+      projectKind: "git",
+      workspaceKind: "local_checkout",
+      name: "main",
+      archivingAt: null,
+      status: "done",
+      statusEnteredAt: null,
+      activityAt: null,
+      scripts: [],
+      ...overrides,
+    };
+  }
+  function client(entries: WorkspaceDescriptorPayload[]) {
+    return {
+      fetchWorkspaces: vi.fn<DaemonClient["fetchWorkspaces"]>().mockResolvedValue({
+        requestId: "list",
+        entries,
+        emptyProjects: [],
+        pageInfo: { nextCursor: null, prevCursor: null, hasMore: false },
+      }),
+      createWorkspace: vi.fn<DaemonClient["createWorkspace"]>().mockResolvedValue({
+        error: null,
+        workspace: workspace("created"),
+        requestId: "create",
+        setupTerminalId: null,
+      }),
+    };
+  }
+  test("reuses the project workspace for repeated conversations", async () => {
+    const host = client([workspace("default")]);
+    expect((await ensureDefaultWorkspace(host, conversationProject)).id).toBe("default");
+    expect((await ensureDefaultWorkspace(host, conversationProject)).id).toBe("default");
+    expect(host.createWorkspace).not.toHaveBeenCalled();
+  });
+  test("creates only one workspace for concurrent first conversations", async () => {
+    const host = client([]);
+    const [first, second] = await Promise.all([
+      ensureDefaultWorkspace(host, conversationProject),
+      ensureDefaultWorkspace(host, conversationProject),
+    ]);
+    expect(first.id).toBe(second.id);
+    expect(host.createWorkspace).toHaveBeenCalledTimes(1);
+    expect(host.createWorkspace).toHaveBeenCalledWith({
+      source: {
+        kind: "directory",
+        path: conversationProject.projectRootPath,
+        projectId: conversationProject.projectId,
+      },
+    });
+  });
+  test("does not reuse worktrees or background workspaces", async () => {
+    const host = client([
+      workspace("isolated", { workspaceKind: "worktree", workspaceDirectory: "/repo/isolated" }),
+      workspace("hidden", { background: true }),
+    ]);
+    expect((await ensureDefaultWorkspace(host, conversationProject)).id).toBe("created");
+  });
+  test("finds the workspace on a later page", async () => {
+    const host = client([workspace("default")]);
+    host.fetchWorkspaces.mockResolvedValueOnce({
+      requestId: "list",
+      entries: [],
+      emptyProjects: [],
+      pageInfo: { nextCursor: "next", prevCursor: null, hasMore: true },
+    });
+    expect((await ensureDefaultWorkspace(host, conversationProject)).id).toBe("default");
+    expect(host.fetchWorkspaces).toHaveBeenLastCalledWith({
+      filter: { projectId: conversationProject.projectId },
+      page: { limit: 200, cursor: "next" },
+    });
+    expect(host.createWorkspace).not.toHaveBeenCalled();
+  });
+  test("allows retry after creation fails", async () => {
+    const host = client([]);
+    host.createWorkspace.mockResolvedValueOnce({
+      error: "Setup failed",
+      workspace: null,
+      requestId: "create",
+      setupTerminalId: null,
+    });
+    await expect(ensureDefaultWorkspace(host, conversationProject)).rejects.toThrow("Setup failed");
+    expect((await ensureDefaultWorkspace(host, conversationProject)).id).toBe("created");
   });
 });

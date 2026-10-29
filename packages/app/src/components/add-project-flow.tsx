@@ -1,3 +1,4 @@
+import { openProjectConversation } from "@/projects/open-project-conversation";
 import { usePanelStore } from "@/stores/panel-store";
 import { getHostRuntimeStore } from "@/runtime/host-runtime";
 import { router } from "expo-router";
@@ -24,6 +25,7 @@ import {
 } from "react";
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -472,8 +474,14 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
     });
   }, [onClose]);
 
-  const openNewWorkspaceForProject = useCallback(
-    (serverId: string, project: WorkspaceProjectDescriptorPayload) => {
+  const openProjectComposer = useCallback(
+    async (serverId: string, project: WorkspaceProjectDescriptorPayload) => {
+      if (Platform.OS === "android") {
+        await openProjectConversation(serverId, project);
+        onClose();
+        usePanelStore.getState().showMobileAgent();
+        return;
+      }
       onClose();
       usePanelStore.getState().showMobileAgent();
       router.push(
@@ -498,7 +506,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
       try {
         const result = await openProject(path);
         if (result.ok) {
-          openNewWorkspaceForProject(hostId, result.project);
+          await openProjectComposer(hostId, result.project);
           return;
         }
         const reason = getOpenProjectFailureReason(result);
@@ -507,18 +515,18 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         setState((current) =>
           setPageStatus(current, sourceKind, { isSubmitting: false, error: message }),
         );
-      } catch {
+      } catch (error) {
         setState((current) =>
           setPageStatus(current, sourceKind, {
             isSubmitting: false,
-            error: "Unable to add project",
+            error: error instanceof Error ? error.message : "Unable to add project",
           }),
         );
       } finally {
         submissionInFlightRef.current = false;
       }
     },
-    [hostId, openNewWorkspaceForProject, openProject],
+    [hostId, openProjectComposer, openProject],
   );
 
   const browse = useCallback(async () => {
@@ -580,7 +588,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         );
         if (result.ok) {
           lastCloneParentByHost.set(locationPage.hostId, parentPath);
-          openNewWorkspaceForProject(locationPage.hostId, result.project);
+          await openProjectComposer(locationPage.hostId, result.project);
           return;
         }
         setState((current) =>
@@ -600,7 +608,7 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         submissionInFlightRef.current = false;
       }
     },
-    [cloneGithubProject, openNewWorkspaceForProject],
+    [cloneGithubProject, openProjectComposer],
   );
   const rows = useMemo<FlowRowOption[]>(() => {
     if (page.kind === "host") {
@@ -774,18 +782,18 @@ export function AddProjectFlow({ request, onClose }: AddProjectFlowProps) {
         upsertProject,
         setHasHydratedWorkspaces,
       });
-      openNewWorkspaceForProject(page.hostId, payload.project);
-    } catch {
+      await openProjectComposer(page.hostId, payload.project);
+    } catch (error) {
       setState((current) =>
         setPageStatus(current, "new-directory-name", {
           isSubmitting: false,
-          error: "Unable to create directory",
+          error: error instanceof Error ? error.message : "Unable to create directory",
         }),
       );
     } finally {
       submissionInFlightRef.current = false;
     }
-  }, [client, openNewWorkspaceForProject, page, setHasHydratedWorkspaces, upsertProject]);
+  }, [client, openProjectComposer, page, setHasHydratedWorkspaces, upsertProject]);
 
   const submitActive = useCallback(() => {
     if (page.kind === "new-directory-name") {

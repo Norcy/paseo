@@ -1,9 +1,20 @@
 import { useCallback, useMemo, useState } from "react";
-import { router } from "expo-router";
-import { useQueryClient } from "@tanstack/react-query";
-import { Archive, MessageCircle, MoreVertical, Pencil, Plus } from "lucide-react-native";
+import { useToast } from "@/contexts/toast-context";
+import { openProjectConversation } from "@/projects/open-project-conversation";
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  MessageCircle,
+  MoreVertical,
+  Plus,
+} from "lucide-react-native";
 import { useAgentDescriptor } from "@/agent-presentation";
-import { StatusIcon } from "@/components/status-icon";
+import { StatusRing } from "@/components/status-ring";
+import { densityIconBox } from "@/styles/density";
+import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
+import { getStatusDotColor } from "@/utils/status-dot-color";
+import { STATUS_INDICATOR_FILLED_DOT_SIZE } from "@/utils/status-indicator-geometry";
 import { ProjectLeadingVisual } from "@/components/sidebar/project-leading-visual";
 import { useProjectIcons } from "@/projects/icons";
 import type { ProjectIconTarget } from "@/projects/icon-target";
@@ -12,23 +23,14 @@ import { PressHighlight } from "@/components/ui/press-highlight";
 import { useTranslation } from "react-i18next";
 import { StyleSheet } from "react-native-unistyles";
 import { DensityIcon } from "@/components/ui/density-icon";
-import { AdaptiveRenameModal } from "@/components/rename-modal";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useArchiveAgent } from "@/hooks/use-archive-agent";
-import { confirmDialog } from "@/utils/confirm-dialog";
+import { ConversationMenu } from "@/components/conversation-menu";
+import { DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import {
   navigateToWorkspace,
   useActiveWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
 import { useSessionStore, type Agent } from "@/stores/session-store";
-
-const renameIcon = <DensityIcon icon={Pencil} size="xs" color="foregroundMuted" />;
-const archiveIcon = <DensityIcon icon={Archive} size="xs" color="foregroundMuted" />;
+import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 
 interface ConversationGroup extends ProjectIconTarget {
   id: string;
@@ -46,26 +48,29 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
     selection ? state.sessions[selection.serverId]?.focusedAgentId : null,
   );
   const sessions = useSessionStore((state) => state.sessions);
+  const collapsedProjectKeys = useSidebarCollapsedSectionsStore(
+    (state) => state.collapsedProjectKeys,
+  );
+  const toggleProjectCollapsed = useSidebarCollapsedSectionsStore(
+    (state) => state.toggleProjectCollapsed,
+  );
   const groups = useMemo(() => {
     const byProject = new Map<string, ConversationGroup>();
     for (const [serverId, session] of Object.entries(sessions)) {
-      for (const workspace of session.workspaces.values()) {
-        const id = `${serverId}:${workspace.projectId}`;
-        if (!byProject.has(id)) {
-          const project = session.projects.get(workspace.projectId);
-          byProject.set(id, {
-            id,
-            projectViewKey: id,
-            serverId,
-            projectId: workspace.projectId,
-            iconWorkingDir: workspace.projectRootPath,
-            customIconRevision: workspace.projectCustomIconRevision,
-            iconRevision: project?.projectIconRevision,
-            title: workspace.projectCustomName || workspace.projectDisplayName,
-            sourceDirectory: workspace.projectRootPath,
-            entries: [],
-          });
-        }
+      for (const project of session.projects.values()) {
+        const id = `${serverId}:${project.projectId}`;
+        byProject.set(id, {
+          id,
+          projectViewKey: id,
+          serverId,
+          projectId: project.projectId,
+          iconWorkingDir: project.projectRootPath,
+          customIconRevision: project.projectCustomIconRevision,
+          iconRevision: project.projectIconRevision,
+          title: project.projectCustomName || project.projectDisplayName,
+          sourceDirectory: project.projectRootPath,
+          entries: [],
+        });
       }
       for (const agent of session.agents.values()) {
         if (agent.archivedAt || !agent.workspaceId) continue;
@@ -96,19 +101,23 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
                 iconDataUri={projectIcons.get(group.projectViewKey) ?? null}
                 newLabel={newLabel}
                 onSelect={onSelect}
+                collapsed={collapsedProjectKeys.has(group.projectViewKey)}
+                onToggleCollapsed={toggleProjectCollapsed}
               />
-              {group.entries.map((agent) => {
-                const active = selection?.serverId === agent.serverId && activeAgentId === agent.id;
-                return (
-                  <ConversationRow
-                    key={`${agent.serverId}:${agent.id}`}
-                    agent={agent}
-                    selected={active}
-                    fallbackTitle={newLabel}
-                    onSelect={onSelect}
-                  />
-                );
-              })}
+              {!collapsedProjectKeys.has(group.projectViewKey) &&
+                group.entries.map((agent) => {
+                  const active =
+                    selection?.serverId === agent.serverId && activeAgentId === agent.id;
+                  return (
+                    <ConversationRow
+                      key={`${agent.serverId}:${agent.id}`}
+                      agent={agent}
+                      selected={active}
+                      fallbackTitle={newLabel}
+                      onSelect={onSelect}
+                    />
+                  );
+                })}
             </View>
           ))
         )}
@@ -122,39 +131,70 @@ function ProjectGroupHeader({
   iconDataUri,
   newLabel,
   onSelect,
+  collapsed,
+  onToggleCollapsed,
 }: {
   group: ConversationGroup;
   iconDataUri: string | null;
   newLabel: string;
   onSelect: () => void;
+  collapsed: boolean;
+  onToggleCollapsed: (projectViewKey: string) => void;
 }) {
-  const handleAdd = useCallback(() => {
-    onSelect();
-    router.push({
-      pathname: "/new",
-      params: {
-        serverId: group.serverId,
+  const toast = useToast();
+  const [isCreating, setIsCreating] = useState(false);
+  const toggleCollapsed = useCallback(
+    () => onToggleCollapsed(group.projectViewKey),
+    [group.projectViewKey, onToggleCollapsed],
+  );
+  const collapseState = useMemo(() => ({ expanded: !collapsed }), [collapsed]);
+  const chevron = collapsed ? ChevronRight : ChevronDown;
+  const accessibilityState = useMemo(
+    () => ({ disabled: isCreating, busy: isCreating }),
+    [isCreating],
+  );
+  const handleAdd = useCallback(async () => {
+    if (isCreating) return;
+    setIsCreating(true);
+    try {
+      await openProjectConversation(group.serverId, {
         projectId: group.projectId,
-        dir: group.sourceDirectory,
-        name: group.title,
-      },
-    });
-  }, [group, onSelect]);
+        projectRootPath: group.sourceDirectory,
+      });
+      onSelect();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create conversation");
+    } finally {
+      setIsCreating(false);
+    }
+  }, [group, isCreating, onSelect, toast]);
 
   return (
     <View style={styles.groupHeader}>
-      <ProjectLeadingVisual
-        displayName={group.title}
-        iconDataUri={iconDataUri}
-        projectViewKey={group.projectViewKey}
-        statusBucket={null}
-        backdrop="surfaceSidebar"
-      />
-      <Text numberOfLines={1} style={styles.groupTitle}>
-        {group.title}
-      </Text>
+      <PressHighlight
+        onPress={toggleCollapsed}
+        accessibilityRole="button"
+        accessibilityLabel={group.title}
+        accessibilityState={collapseState}
+        style={styles.projectToggle}
+        highlightStyle={styles.rowPressed}
+      >
+        <ProjectLeadingVisual
+          displayName={group.title}
+          iconDataUri={iconDataUri}
+          projectViewKey={group.projectViewKey}
+          statusBucket={null}
+          backdrop="surfaceSidebar"
+        />
+        <Text numberOfLines={1} style={styles.groupTitle}>
+          {group.title}
+        </Text>
+        <DensityIcon icon={chevron} size="xs" color="foregroundMuted" />
+      </PressHighlight>
       <PressHighlight
         onPress={handleAdd}
+        disabled={isCreating}
+        accessibilityState={accessibilityState}
         accessibilityRole="button"
         accessibilityLabel={`${newLabel}: ${group.title}`}
         style={styles.projectAddButton}
@@ -178,10 +218,6 @@ function ConversationRow({
   onSelect: () => void;
 }) {
   const { t } = useTranslation();
-  const [renaming, setRenaming] = useState(false);
-  const client = useSessionStore((state) => state.sessions[agent.serverId]?.client ?? null);
-  const queryClient = useQueryClient();
-  const { archiveAgent } = useArchiveAgent();
   const descriptor = useAgentDescriptor(
     { kind: "agent", agentId: agent.id },
     { serverId: agent.serverId },
@@ -196,89 +232,50 @@ function ConversationRow({
     }
     onSelect();
   }, [agent, onSelect]);
-  const handleRename = useCallback(() => setRenaming(true), []);
-  const handleArchive = useCallback(() => {
-    void (async () => {
-      if (
-        agent.status === "running" &&
-        !(await confirmDialog({
-          title: t("workspace.tabs.confirmations.archiveRunningAgentTitle"),
-          message: t("workspace.tabs.confirmations.archiveRunningAgentMessage"),
-          confirmLabel: t("workspace.tabs.confirmations.archive"),
-          cancelLabel: t("workspace.tabs.confirmations.cancel"),
-          destructive: true,
-        }))
-      ) {
-        return;
-      }
-      await archiveAgent({ serverId: agent.serverId, agentId: agent.id });
-    })().catch(() => {});
-  }, [agent.id, agent.serverId, agent.status, archiveAgent, t]);
-  const handleRenameClose = useCallback(() => setRenaming(false), []);
-  const handleRenameSubmit = useCallback(
-    async (title: string) => {
-      if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
-      await client.updateAgent(agent.id, { name: title.trim() });
-      void queryClient.invalidateQueries({
-        queryKey: ["sidebarAgentsList", agent.serverId],
-      });
-      void queryClient.invalidateQueries({ queryKey: ["allAgents", agent.serverId] });
-      setRenaming(false);
-    },
-    [agent.id, agent.serverId, client, queryClient, t],
-  );
 
   return (
-    <>
-      <View style={selected ? [styles.row, styles.rowSelected] : styles.row}>
-        <PressHighlight
-          onPress={handlePress}
+    <View style={selected ? [styles.row, styles.rowSelected] : styles.row}>
+      <PressHighlight
+        onPress={handlePress}
+        accessibilityRole="button"
+        accessibilityLabel={agent.title || fallbackTitle}
+        style={styles.rowMain}
+        highlightStyle={styles.rowPressed}
+      >
+        <View style={styles.conversationIcon}>
+          <ConversationIcon bucket={descriptor.statusBucket} />
+        </View>
+        <Text numberOfLines={1} style={styles.conversationTitle}>
+          {agent.title || fallbackTitle}
+        </Text>
+      </PressHighlight>
+      <ConversationMenu agent={agent}>
+        <DropdownMenuTrigger
+          hitSlop={8}
+          style={styles.moreButton}
           accessibilityRole="button"
-          accessibilityLabel={agent.title || fallbackTitle}
-          style={styles.rowMain}
-          highlightStyle={styles.rowPressed}
+          accessibilityLabel={t("sidebar.project.actions.menu")}
         >
-          <StatusIcon
-            statusBucket={descriptor.statusBucket}
-            size={16}
-            backdrop={selected ? "surfaceSidebarSelected" : "surfaceSidebar"}
-          >
-            <DensityIcon icon={MessageCircle} size="xs" color="foregroundMuted" />
-          </StatusIcon>
-          <Text numberOfLines={1} style={styles.conversationTitle}>
-            {agent.title || fallbackTitle}
-          </Text>
-        </PressHighlight>
-        <DropdownMenu compactMode="sheet">
-          <DropdownMenuTrigger
-            hitSlop={8}
-            style={styles.moreButton}
-            accessibilityRole="button"
-            accessibilityLabel={t("sidebar.project.actions.menu")}
-          >
-            <DensityIcon icon={MoreVertical} size="xs" color="foregroundMuted" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" width={210} sheetTitle={agent.title || fallbackTitle}>
-            <DropdownMenuItem leading={renameIcon} onSelect={handleRename}>
-              {t("workspace.tabs.menu.renameAgent")}
-            </DropdownMenuItem>
-            <DropdownMenuItem leading={archiveIcon} onSelect={handleArchive} disabled={!client}>
-              {t("agentList.archiveSheet.archive")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </View>
-      <AdaptiveRenameModal
-        visible={renaming}
-        title={t("workspace.tabs.menu.renameAgent")}
-        initialValue={agent.title || ""}
-        submitLabel={t("workspace.tabs.menu.rename")}
-        maxLength={200}
-        onClose={handleRenameClose}
-        onSubmit={handleRenameSubmit}
-      />
-    </>
+          <DensityIcon icon={MoreVertical} size="xs" color="foregroundMuted" />
+        </DropdownMenuTrigger>
+      </ConversationMenu>
+    </View>
   );
+}
+
+function ConversationIcon({ bucket }: { bucket: SidebarStateBucket | null }) {
+  switch (bucket) {
+    case "running":
+      return <StatusRing />;
+    case "needs_input":
+      return <DensityIcon icon={CircleAlert} size="xs" color="statusDotWarning" />;
+    case "failed":
+      return <View style={[styles.statusDot, styles.statusFailed]} />;
+    case "attention":
+      return <View style={[styles.statusDot, styles.statusAttention]} />;
+    default:
+      return <DensityIcon icon={MessageCircle} size="xs" color="foregroundMuted" />;
+  }
 }
 
 const styles = StyleSheet.create((theme) => ({
@@ -302,6 +299,15 @@ const styles = StyleSheet.create((theme) => ({
     paddingLeft: theme.spacing[2],
     marginBottom: theme.spacing[1],
   },
+  projectToggle: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 32,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+  },
   projectAddButton: {
     width: 32,
     height: 32,
@@ -312,7 +318,7 @@ const styles = StyleSheet.create((theme) => ({
   groupTitle: {
     flex: 1,
     color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.semibold,
     paddingRight: theme.spacing[1],
   },
@@ -332,6 +338,24 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.spacing[2],
     minHeight: 42,
   },
+  conversationIcon: {
+    width: densityIconBox("md"),
+    height: densityIconBox("md"),
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusDot: {
+    width: STATUS_INDICATOR_FILLED_DOT_SIZE,
+    height: STATUS_INDICATOR_FILLED_DOT_SIZE,
+    borderRadius: theme.borderRadius.full,
+  },
+  statusFailed: {
+    backgroundColor: getStatusDotColor({ theme, bucket: "failed" }) ?? undefined,
+  },
+  statusAttention: {
+    backgroundColor: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
+  },
   moreButton: {
     width: 32,
     height: 32,
@@ -344,6 +368,6 @@ const styles = StyleSheet.create((theme) => ({
   conversationTitle: {
     flex: 1,
     color: theme.colors.foreground,
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.base,
   },
 }));

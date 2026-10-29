@@ -211,6 +211,7 @@ import {
   WorkspaceHeaderMenuDesktop,
   WorkspaceHeaderMenuMobile,
 } from "@/screens/workspace/workspace-header-menu";
+import { ConversationHeaderMenu } from "@/components/conversation-menu";
 import { PluginHeaderButtons } from "@/plugins";
 import {
   createWorkspaceFileTabTarget,
@@ -3415,27 +3416,35 @@ function WorkspaceScreenContent({
           explorerToggleLabel={explorerSidebarToggleLabel}
           explorerToggleAccessibilityState={explorerSidebarToggleAccessibilityState}
         >
-          <WorkspaceHeaderMenuMobile
-            normalizedServerId={normalizedServerId}
-            normalizedWorkspaceId={normalizedWorkspaceId}
-            scripts={compactHeaderScripts}
-            currentBranchName={currentBranchName}
-            showWorkspaceSetup={showWorkspaceSetup}
-            showCreateBrowserTab={showCreateBrowserTab}
-            createTerminalDisabled={createTerminalDisabled}
-            importAgentDisabled={!canOpenImportSheet}
-            copyPathDisabled={!workspaceDirectory}
-            onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
-            onCreateBrowser={handleCreateBrowserTab}
-            onOpenImportSheet={openImportSheet}
-            onCopyWorkspacePath={handleCopyWorkspacePath}
-            onCopyBranchName={handleCopyBranchName}
-            onOpenSetupTab={handleOpenSetupTab}
-          />
+          {Platform.OS === "android" ? (
+            <ConversationHeaderMenu
+              serverId={normalizedServerId}
+              agentId={getActiveConversationAgentId(activeTab)}
+            />
+          ) : (
+            <WorkspaceHeaderMenuMobile
+              normalizedServerId={normalizedServerId}
+              normalizedWorkspaceId={normalizedWorkspaceId}
+              scripts={compactHeaderScripts}
+              currentBranchName={currentBranchName}
+              showWorkspaceSetup={showWorkspaceSetup}
+              showCreateBrowserTab={showCreateBrowserTab}
+              createTerminalDisabled={createTerminalDisabled}
+              importAgentDisabled={!canOpenImportSheet}
+              copyPathDisabled={!workspaceDirectory}
+              onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
+              onCreateBrowser={handleCreateBrowserTab}
+              onOpenImportSheet={openImportSheet}
+              onCopyWorkspacePath={handleCopyWorkspacePath}
+              onCopyBranchName={handleCopyBranchName}
+              onOpenSetupTab={handleOpenSetupTab}
+            />
+          )}
         </CompactWorkspaceHeader>
       ) : null,
     [
       activeConversationTitle,
+      activeTab,
       canOpenImportSheet,
       compactHeaderScripts,
       createTerminalDisabled,
