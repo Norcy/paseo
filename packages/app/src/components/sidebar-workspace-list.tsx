@@ -37,7 +37,15 @@ import { getSidebarRowBackdrop } from "@/components/sidebar/sidebar-row-backdrop
 import { type GestureType } from "react-native-gesture-handler";
 import { WorkspaceRenameModal } from "@/components/workspace-rename-modal";
 import { useWorkspaceClipboardActions } from "@/hooks/use-workspace-clipboard-actions";
-import { ExternalLink, Settings, MoreVertical, Plus, Trash2 } from "lucide-react-native";
+import {
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Settings,
+  MoreVertical,
+  Plus,
+  Trash2,
+} from "lucide-react-native";
 import { NestableScrollContainer } from "react-native-draggable-flatlist";
 import { DraggableList, type DraggableRenderItemInfo } from "./draggable-list";
 import type { DraggableListDragHandleProps } from "./draggable-list.types";
@@ -242,6 +250,8 @@ interface SidebarWorkspaceListProps {
 }
 
 interface ProjectHeaderRowProps {
+  createAction?: ReactElement;
+  showCollapseIndicator?: boolean;
   project: SidebarProjectEntry;
   displayName: string;
   iconDataUri: string | null;
@@ -255,7 +265,7 @@ interface ProjectHeaderRowProps {
   onWorktreeCreated?: (workspaceId: string) => void;
   shortcutNumber?: number | null;
   showShortcutBadge?: boolean;
-  drag: () => void;
+  drag?: () => void;
   isDragging: boolean;
   isArchiving?: boolean;
   menuController: ReturnType<typeof useContextMenu> | null;
@@ -403,6 +413,7 @@ const prBadgeStyles = StyleSheet.create((theme) => ({
 }));
 
 function ProjectRowTrailingActions({
+  createAction,
   projectViewKey,
   displayName,
   worktreeTarget,
@@ -415,6 +426,7 @@ function ProjectRowTrailingActions({
   onRemoveProject,
   removeProjectStatus,
 }: {
+  createAction?: ReactElement;
   projectViewKey: string;
   displayName: string;
   worktreeTarget: SidebarProjectHostTarget | null;
@@ -430,15 +442,16 @@ function ProjectRowTrailingActions({
   const actionsVisible = isHovered || platformIsNative || isMobileBreakpoint;
   return (
     <View style={styles.projectTrailingActions}>
-      {worktreeTarget ? (
-        <NewWorktreeButton
-          displayName={displayName}
-          onPress={onBeginWorkspaceSetup}
-          visible={actionsVisible}
-          showShortcutHint={isProjectActive}
-          testID={`sidebar-project-new-worktree-${projectViewKey}`}
-        />
-      ) : null}
+      {createAction ??
+        (worktreeTarget ? (
+          <SidebarProjectCreateButton
+            displayName={displayName}
+            onPress={onBeginWorkspaceSetup}
+            visible={actionsVisible}
+            showShortcutHint={isProjectActive}
+            testID={`sidebar-project-new-worktree-${projectViewKey}`}
+          />
+        ) : null)}
       {onRemoveProject ? (
         <View
           style={!actionsVisible && styles.projectKebabButtonHidden}
@@ -704,8 +717,9 @@ function WorkspaceRowRightGroup({
   );
 }
 
-function NewWorktreeButton({
+export function SidebarProjectCreateButton({
   displayName,
+  label,
   onPress,
   visible,
   loading = false,
@@ -713,6 +727,7 @@ function NewWorktreeButton({
   showShortcutHint = false,
 }: {
   displayName: string;
+  label?: string;
   onPress: () => void;
   visible: boolean;
   loading?: boolean;
@@ -748,9 +763,12 @@ function NewWorktreeButton({
             onPress={handlePress}
             disabled={loading}
             accessibilityRole={platformIsWeb ? undefined : "button"}
-            accessibilityLabel={t("sidebar.workspace.actions.createWorkspaceFor", {
-              projectName: displayName,
-            })}
+            accessibilityLabel={
+              label ??
+              t("sidebar.workspace.actions.createWorkspaceFor", {
+                projectName: displayName,
+              })
+            }
             testID={testID}
           >
             {({ hovered, pressed }) =>
@@ -770,7 +788,7 @@ function NewWorktreeButton({
         <TooltipContent side="bottom" align="center" offset={8}>
           <View style={styles.projectActionTooltipRow}>
             <Text style={styles.projectActionTooltipText}>
-              {t("sidebar.workspace.actions.newWorkspace")}
+              {label ?? t("sidebar.workspace.actions.newWorkspace")}
             </Text>
             {showShortcutHint && newWorktreeKeys ? (
               <Shortcut chord={newWorktreeKeys} style={styles.projectActionTooltipShortcut} />
@@ -849,7 +867,34 @@ function NewWorkspaceGhostRow({
   );
 }
 
+function ProjectRowTitle({
+  displayName,
+  chevron,
+  showCollapseIndicator,
+}: {
+  displayName: string;
+  chevron: "expand" | "collapse" | null;
+  showCollapseIndicator: boolean;
+}) {
+  return (
+    <View style={styles.projectTitleGroup}>
+      <Text style={styles.projectTitle} numberOfLines={1}>
+        {displayName}
+      </Text>
+      {showCollapseIndicator ? (
+        <DensityIcon
+          icon={chevron === "expand" ? ChevronRight : ChevronDown}
+          size="xs"
+          color="foregroundMuted"
+        />
+      ) : null}
+    </View>
+  );
+}
+
 function ProjectHeaderRow({
+  createAction,
+  showCollapseIndicator = false,
   project,
   displayName,
   iconDataUri,
@@ -952,17 +997,18 @@ function ProjectHeaderRow({
           projectViewKey={project.viewKey}
           backdrop={getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered })}
           chevron={chevron}
-          showChevron={isHovered && chevron !== null}
+          showChevron={isHovered && !showCollapseIndicator}
           isArchiving={isArchiving}
         />
 
-        <View style={styles.projectTitleGroup}>
-          <Text style={styles.projectTitle} numberOfLines={1}>
-            {displayName}
-          </Text>
-        </View>
+        <ProjectRowTitle
+          displayName={displayName}
+          chevron={chevron}
+          showCollapseIndicator={showCollapseIndicator}
+        />
       </View>
       <ProjectRowTrailingActions
+        createAction={createAction}
         projectViewKey={project.viewKey}
         displayName={displayName}
         worktreeTarget={worktreeTarget}
@@ -1540,6 +1586,107 @@ function WorkspaceRow({
   );
 }
 
+function useProjectRemoval(project: SidebarProjectEntry, displayName: string) {
+  const toast = useToast();
+  const { t } = useTranslation();
+  const [isRemovingProject, setIsRemovingProject] = useState(false);
+
+  const handleRemoveProject = useCallback(() => {
+    if (isRemovingProject) {
+      return;
+    }
+
+    void (async () => {
+      const confirmed = await confirmDialog({
+        title: t("sidebar.project.confirmations.removeTitle"),
+        message: t("sidebar.project.confirmations.removeMessage", { projectName: displayName }),
+        confirmLabel: t("sidebar.project.confirmations.removeConfirm"),
+        cancelLabel: t("sidebar.project.confirmations.cancel"),
+        destructive: true,
+      });
+      if (!confirmed) {
+        return;
+      }
+
+      setIsRemovingProject(true);
+      const readiness = getCurrentProjectRemoveReadiness({
+        hosts: project.hosts,
+      });
+      if (readiness.kind === "needs_host_update") {
+        toast.error(t("sidebar.project.toasts.updateHostToRemove"));
+        setIsRemovingProject(false);
+        return;
+      }
+
+      void removeProjectFromHosts({
+        targets: readiness.targets,
+        getClient: (serverId) => getHostRuntimeStore().getClient(serverId),
+      })
+        .then((outcome) => {
+          if (outcome.kind === "host_disconnected") {
+            toast.error(t("sidebar.project.toasts.hostDisconnected"));
+            return null;
+          }
+          if (outcome.kind === "failed") {
+            toast.error(t("sidebar.project.toasts.removeFailed"));
+          }
+          return null;
+        })
+        .catch((error) => {
+          toast.error(
+            error instanceof Error ? error.message : t("sidebar.project.toasts.removeFailed"),
+          );
+        })
+        .finally(() => {
+          setIsRemovingProject(false);
+        });
+    })();
+  }, [isRemovingProject, displayName, t, toast, project.hosts]);
+
+  return { isRemovingProject, handleRemoveProject };
+}
+
+export function SidebarProjectHeader({
+  project,
+  iconDataUri,
+  collapsed,
+  onToggleCollapsed,
+  createAction,
+}: {
+  project: SidebarProjectEntry;
+  iconDataUri: string | null;
+  collapsed: boolean;
+  onToggleCollapsed: (projectViewKey: string) => void;
+  createAction: ReactElement;
+}) {
+  const { isRemovingProject, handleRemoveProject } = useProjectRemoval(
+    project,
+    project.projectName,
+  );
+  const handlePress = useCallback(
+    () => onToggleCollapsed(project.viewKey),
+    [onToggleCollapsed, project.viewKey],
+  );
+  return (
+    <ProjectHeaderRow
+      project={project}
+      displayName={project.projectName}
+      iconDataUri={iconDataUri}
+      statusBucket={null}
+      chevron={collapsed ? "expand" : "collapse"}
+      onPress={handlePress}
+      worktreeTarget={null}
+      createAction={createAction}
+      showCollapseIndicator
+      isDragging={false}
+      isArchiving={isRemovingProject}
+      menuController={null}
+      onRemoveProject={handleRemoveProject}
+      removeProjectStatus={isRemovingProject ? "pending" : "idle"}
+    />
+  );
+}
+
 function ProjectBlock({
   project,
   workspaceEntriesByKey,
@@ -1698,61 +1845,7 @@ function ProjectBlock({
     [onWorkspaceReorder, project.viewKey],
   );
 
-  const toast = useToast();
-  const { t } = useTranslation();
-  const [isRemovingProject, setIsRemovingProject] = useState(false);
-
-  const handleRemoveProject = useCallback(() => {
-    if (isRemovingProject) {
-      return;
-    }
-
-    void (async () => {
-      const confirmed = await confirmDialog({
-        title: t("sidebar.project.confirmations.removeTitle"),
-        message: t("sidebar.project.confirmations.removeMessage", { projectName: displayName }),
-        confirmLabel: t("sidebar.project.confirmations.removeConfirm"),
-        cancelLabel: t("sidebar.project.confirmations.cancel"),
-        destructive: true,
-      });
-      if (!confirmed) {
-        return;
-      }
-
-      setIsRemovingProject(true);
-      const readiness = getCurrentProjectRemoveReadiness({
-        hosts: project.hosts,
-      });
-      if (readiness.kind === "needs_host_update") {
-        toast.error(t("sidebar.project.toasts.updateHostToRemove"));
-        setIsRemovingProject(false);
-        return;
-      }
-
-      void removeProjectFromHosts({
-        targets: readiness.targets,
-        getClient: (serverId) => getHostRuntimeStore().getClient(serverId),
-      })
-        .then((outcome) => {
-          if (outcome.kind === "host_disconnected") {
-            toast.error(t("sidebar.project.toasts.hostDisconnected"));
-            return null;
-          }
-          if (outcome.kind === "failed") {
-            toast.error(t("sidebar.project.toasts.removeFailed"));
-          }
-          return null;
-        })
-        .catch((error) => {
-          toast.error(
-            error instanceof Error ? error.message : t("sidebar.project.toasts.removeFailed"),
-          );
-        })
-        .finally(() => {
-          setIsRemovingProject(false);
-        });
-    })();
-  }, [isRemovingProject, displayName, t, toast, project.hosts]);
+  const { isRemovingProject, handleRemoveProject } = useProjectRemoval(project, displayName);
 
   const handleToggleCollapsed = useCallback(() => {
     onToggleCollapsed(project.viewKey);

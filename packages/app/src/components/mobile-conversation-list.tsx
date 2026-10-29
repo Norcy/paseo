@@ -1,23 +1,23 @@
 import { useCallback, useMemo, useState } from "react";
 import { useToast } from "@/contexts/toast-context";
 import { openProjectConversation } from "@/projects/open-project-conversation";
-import {
-  ChevronDown,
-  ChevronRight,
-  CircleAlert,
-  MessageCircle,
-  MoreVertical,
-  Plus,
-} from "lucide-react-native";
+import { CircleAlert, MessageCircle, MoreVertical } from "lucide-react-native";
 import { useAgentDescriptor } from "@/agent-presentation";
 import { StatusRing } from "@/components/status-ring";
 import { densityIconBox } from "@/styles/density";
 import type { SidebarStateBucket } from "@/utils/sidebar-agent-state";
 import { getStatusDotColor } from "@/utils/status-dot-color";
 import { STATUS_INDICATOR_FILLED_DOT_SIZE } from "@/utils/status-indicator-geometry";
-import { ProjectLeadingVisual } from "@/components/sidebar/project-leading-visual";
+import {
+  SidebarProjectHeader,
+  SidebarProjectCreateButton,
+} from "@/components/sidebar-workspace-list";
+import {
+  useSidebarWorkspacesList,
+  type SidebarProjectEntry,
+} from "@/hooks/use-sidebar-workspaces-list";
+import { resolveSidebarProjectIconTargets } from "@/utils/sidebar-project-row-model";
 import { useProjectIcons } from "@/projects/icons";
-import type { ProjectIconTarget } from "@/projects/icon-target";
 import { ScrollView, Text, View } from "react-native";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { useTranslation } from "react-i18next";
@@ -32,12 +32,8 @@ import {
 import { useSessionStore, type Agent } from "@/stores/session-store";
 import { useSidebarCollapsedSectionsStore } from "@/stores/sidebar-collapsed-sections-store";
 
-interface ConversationGroup extends ProjectIconTarget {
-  id: string;
-  serverId: string;
-  projectId: string;
-  title: string;
-  sourceDirectory: string;
+interface ConversationGroup {
+  project: SidebarProjectEntry;
   entries: Agent[];
 }
 
@@ -48,43 +44,33 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
     selection ? state.sessions[selection.serverId]?.focusedAgentId : null,
   );
   const sessions = useSessionStore((state) => state.sessions);
+  const { projects } = useSidebarWorkspacesList();
   const collapsedProjectKeys = useSidebarCollapsedSectionsStore(
     (state) => state.collapsedProjectKeys,
   );
   const toggleProjectCollapsed = useSidebarCollapsedSectionsStore(
     (state) => state.toggleProjectCollapsed,
   );
-  const groups = useMemo(() => {
-    const byProject = new Map<string, ConversationGroup>();
-    for (const [serverId, session] of Object.entries(sessions)) {
-      for (const project of session.projects.values()) {
-        const id = `${serverId}:${project.projectId}`;
-        byProject.set(id, {
-          id,
-          projectViewKey: id,
-          serverId,
-          projectId: project.projectId,
-          iconWorkingDir: project.projectRootPath,
-          customIconRevision: project.projectCustomIconRevision,
-          iconRevision: project.projectIconRevision,
-          title: project.projectCustomName || project.projectDisplayName,
-          sourceDirectory: project.projectRootPath,
-          entries: [],
-        });
-      }
-      for (const agent of session.agents.values()) {
-        if (agent.archivedAt || !agent.workspaceId) continue;
-        const workspace = session.workspaces.get(agent.workspaceId);
-        if (!workspace) continue;
-        byProject.get(`${serverId}:${workspace.projectId}`)?.entries.push(agent);
-      }
-    }
-    return [...byProject.values()].map((group) => {
-      group.entries.sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
-      return group;
-    });
-  }, [sessions]);
-  const projectIcons = useProjectIcons({ projects: groups });
+  const groups = useMemo(
+    () =>
+      projects.map((project): ConversationGroup => {
+        const entries: Agent[] = [];
+        for (const host of project.hosts) {
+          const session = sessions[host.serverId];
+          if (!session) continue;
+          for (const agent of session.agents.values()) {
+            if (agent.archivedAt || !agent.workspaceId) continue;
+            const workspace = session.workspaces.get(agent.workspaceId);
+            if (workspace?.projectId === host.projectId) entries.push(agent);
+          }
+        }
+        entries.sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
+        return { project, entries };
+      }),
+    [projects, sessions],
+  );
+  const iconTargets = useMemo(() => resolveSidebarProjectIconTargets(projects), [projects]);
+  const projectIcons = useProjectIcons({ projects: iconTargets });
   const emptyLabel = t("sidebar.empty.noConversations", "No conversations yet");
   const newLabel = t("sidebar.actions.newConversation", "New conversation");
 
@@ -95,16 +81,16 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
           <Text style={styles.empty}>{emptyLabel}</Text>
         ) : (
           groups.map((group) => (
-            <View key={group.id} style={styles.group}>
+            <View key={group.project.viewKey} style={styles.group}>
               <ProjectGroupHeader
-                group={group}
-                iconDataUri={projectIcons.get(group.projectViewKey) ?? null}
+                project={group.project}
+                iconDataUri={projectIcons.get(group.project.viewKey) ?? null}
                 newLabel={newLabel}
                 onSelect={onSelect}
-                collapsed={collapsedProjectKeys.has(group.projectViewKey)}
+                collapsed={collapsedProjectKeys.has(group.project.viewKey)}
                 onToggleCollapsed={toggleProjectCollapsed}
               />
-              {!collapsedProjectKeys.has(group.projectViewKey) &&
+              {!collapsedProjectKeys.has(group.project.viewKey) &&
                 group.entries.map((agent) => {
                   const active =
                     selection?.serverId === agent.serverId && activeAgentId === agent.id;
@@ -127,14 +113,14 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
 }
 
 function ProjectGroupHeader({
-  group,
+  project,
   iconDataUri,
   newLabel,
   onSelect,
   collapsed,
   onToggleCollapsed,
 }: {
-  group: ConversationGroup;
+  project: SidebarProjectEntry;
   iconDataUri: string | null;
   newLabel: string;
   onSelect: () => void;
@@ -143,23 +129,14 @@ function ProjectGroupHeader({
 }) {
   const toast = useToast();
   const [isCreating, setIsCreating] = useState(false);
-  const toggleCollapsed = useCallback(
-    () => onToggleCollapsed(group.projectViewKey),
-    [group.projectViewKey, onToggleCollapsed],
-  );
-  const collapseState = useMemo(() => ({ expanded: !collapsed }), [collapsed]);
-  const chevron = collapsed ? ChevronRight : ChevronDown;
-  const accessibilityState = useMemo(
-    () => ({ disabled: isCreating, busy: isCreating }),
-    [isCreating],
-  );
+  const target = project.hosts[0];
   const handleAdd = useCallback(async () => {
-    if (isCreating) return;
+    if (isCreating || !target) return;
     setIsCreating(true);
     try {
-      await openProjectConversation(group.serverId, {
-        projectId: group.projectId,
-        projectRootPath: group.sourceDirectory,
+      await openProjectConversation(target.serverId, {
+        projectId: target.projectId,
+        projectRootPath: target.iconWorkingDir,
       });
       onSelect();
     } catch (error) {
@@ -167,42 +144,30 @@ function ProjectGroupHeader({
     } finally {
       setIsCreating(false);
     }
-  }, [group, isCreating, onSelect, toast]);
+  }, [target, isCreating, onSelect, toast]);
+
+  const createAction = useMemo(
+    () => (
+      <SidebarProjectCreateButton
+        displayName={project.projectName}
+        label={newLabel}
+        onPress={handleAdd}
+        visible={Boolean(target)}
+        loading={isCreating}
+        testID={`sidebar-project-new-conversation-${project.viewKey}`}
+      />
+    ),
+    [handleAdd, isCreating, newLabel, project.projectName, project.viewKey, target],
+  );
 
   return (
-    <View style={styles.groupHeader}>
-      <PressHighlight
-        onPress={toggleCollapsed}
-        accessibilityRole="button"
-        accessibilityLabel={group.title}
-        accessibilityState={collapseState}
-        style={styles.projectToggle}
-        highlightStyle={styles.rowPressed}
-      >
-        <ProjectLeadingVisual
-          displayName={group.title}
-          iconDataUri={iconDataUri}
-          projectViewKey={group.projectViewKey}
-          statusBucket={null}
-          backdrop="surfaceSidebar"
-        />
-        <Text numberOfLines={1} style={styles.groupTitle}>
-          {group.title}
-        </Text>
-        <DensityIcon icon={chevron} size="xs" color="foregroundMuted" />
-      </PressHighlight>
-      <PressHighlight
-        onPress={handleAdd}
-        disabled={isCreating}
-        accessibilityState={accessibilityState}
-        accessibilityRole="button"
-        accessibilityLabel={`${newLabel}: ${group.title}`}
-        style={styles.projectAddButton}
-        highlightStyle={styles.rowPressed}
-      >
-        <DensityIcon icon={Plus} size="xs" color="foregroundMuted" />
-      </PressHighlight>
-    </View>
+    <SidebarProjectHeader
+      project={project}
+      iconDataUri={iconDataUri}
+      collapsed={collapsed}
+      onToggleCollapsed={onToggleCollapsed}
+      createAction={createAction}
+    />
   );
 }
 
@@ -292,36 +257,6 @@ const styles = StyleSheet.create((theme) => ({
     padding: theme.spacing[2],
   },
   group: { marginBottom: theme.spacing[4] },
-  groupHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    paddingLeft: theme.spacing[2],
-    marginBottom: theme.spacing[1],
-  },
-  projectToggle: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 32,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing[2],
-    borderRadius: theme.borderRadius.md,
-  },
-  projectAddButton: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.borderRadius.full,
-  },
-  groupTitle: {
-    flex: 1,
-    color: theme.colors.foregroundMuted,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.semibold,
-    paddingRight: theme.spacing[1],
-  },
   row: {
     flexDirection: "row",
     alignItems: "center",
