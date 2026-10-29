@@ -8,9 +8,19 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   Pressable,
+  Platform,
   StyleSheet as RNStyleSheet,
   Text,
   useWindowDimensions,
@@ -22,7 +32,6 @@ import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
-import { SidebarCloseButton } from "@/components/headers/sidebar-close-button";
 import { resolveDesktopSidebarWidth } from "@/components/desktop-sidebar-layout";
 import {
   SIDEBAR_RESIZE_ACTIVATION_OFFSET,
@@ -73,6 +82,7 @@ import {
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
+import { MobileConversationList } from "./mobile-conversation-list";
 
 type SidebarTheme = ReturnType<typeof useUnistyles>["theme"];
 
@@ -542,20 +552,6 @@ function MobileSidebar({
   const handleWorkspacePress = useCallback(() => {
     closeSidebar();
   }, [closeSidebar]);
-
-  const closeButton = useMemo(
-    () => (
-      <SidebarCloseButton
-        label={labels.closeSidebar}
-        onPress={closeSidebar}
-        testID="sidebar-close"
-        nativeID="sidebar-close"
-        style={styles.mobileCloseButton}
-      />
-    ),
-    [labels.closeSidebar, closeSidebar],
-  );
-
   const mobileSidebarInsetStyle = useMemo(
     () => ({
       paddingTop: insetsTop,
@@ -565,6 +561,37 @@ function MobileSidebar({
     [insetsTop, insetsBottom, theme.colors.surfaceSidebar],
   );
 
+  let sidebarBody: ReactNode;
+  if (Platform.OS === "android") {
+    sidebarBody = <MobileConversationList onSelect={handleWorkspacePress} />;
+  } else if (isInitialLoad && !hasActiveHostFilter) {
+    sidebarBody = <SidebarAgentListSkeleton />;
+  } else {
+    sidebarBody = (
+      <SidebarWorkspaceList
+        collapsedProjectKeys={collapsedProjectKeys}
+        onToggleProjectCollapsed={toggleProjectCollapsed}
+        shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+        groupMode={groupMode}
+        workspaceGroups={workspaceGroups}
+        projectIconTargets={projectIconTargets}
+        pinnedGroups={pinnedGroups}
+        projects={projects}
+        hasProjectsBeforeFilter={hasProjectsBeforeFilter}
+        hasActiveProjectFilter={hasActiveProjectFilter}
+        workspaceEntriesByKey={workspaceEntriesByKey}
+        isRefreshing={isManualRefresh && isRevalidating}
+        onRefresh={handleRefresh}
+        onWorkspacePress={handleWorkspacePress}
+        onAddProject={handleOpenProject}
+        onImportSession={handleImportSession}
+        parentGestureRef={closeGestureRef}
+        dragGestureHostActive={active}
+        listHeaderComponent={workspacesSectionHeaderElement}
+      />
+    );
+  }
+
   return (
     <MobilePanelOverlay
       panel="agent-list"
@@ -573,37 +600,9 @@ function MobileSidebar({
     >
       <View style={styles.sidebarContent} pointerEvents="auto">
         <WindowChromeSafeArea placement="below" />
-        <SidebarNavRows
-          style={styles.sidebarHeaderGroup}
-          onBeforeNavigate={closeSidebar}
-          firstRowTrailing={closeButton}
-        />
+        <SidebarNavRows style={styles.sidebarHeaderGroup} onBeforeNavigate={closeSidebar} />
 
-        {isInitialLoad && !hasActiveHostFilter ? (
-          <SidebarAgentListSkeleton />
-        ) : (
-          <SidebarWorkspaceList
-            collapsedProjectKeys={collapsedProjectKeys}
-            onToggleProjectCollapsed={toggleProjectCollapsed}
-            shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
-            groupMode={groupMode}
-            workspaceGroups={workspaceGroups}
-            projectIconTargets={projectIconTargets}
-            pinnedGroups={pinnedGroups}
-            projects={projects}
-            hasProjectsBeforeFilter={hasProjectsBeforeFilter}
-            hasActiveProjectFilter={hasActiveProjectFilter}
-            workspaceEntriesByKey={workspaceEntriesByKey}
-            isRefreshing={isManualRefresh && isRevalidating}
-            onRefresh={handleRefresh}
-            onWorkspacePress={handleWorkspacePress}
-            onAddProject={handleOpenProject}
-            onImportSession={handleImportSession}
-            parentGestureRef={closeGestureRef}
-            dragGestureHostActive={active}
-            listHeaderComponent={workspacesSectionHeaderElement}
-          />
-        )}
+        {sidebarBody}
 
         <SidebarFooter
           handleOpenProject={handleOpenProject}
@@ -852,9 +851,6 @@ const styles = StyleSheet.create((theme) => ({
   sidebarContent: {
     flex: 1,
     minHeight: 0,
-  },
-  mobileCloseButton: {
-    marginRight: theme.spacing[2],
   },
   desktopSidebarBorder: {
     borderRightWidth: 1,
