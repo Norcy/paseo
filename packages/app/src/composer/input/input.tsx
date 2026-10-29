@@ -8,6 +8,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
   Text,
+  Platform,
   useWindowDimensions,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
@@ -2124,7 +2125,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           <View style={styles.rightButtonGroup}>
             {beforeVoiceContent}
             <VoiceButtonTooltip
-              visible={mode.showVoice}
+              visible={mode.showVoice && Platform.OS !== "android"}
               onVoicePress={handleVoicePress}
               isDictationStartEnabled={isDictationStartEnabled}
               voiceButtonAccessibilityLabel={voiceButtonAccessibilityLabel}
