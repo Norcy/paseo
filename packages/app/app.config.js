@@ -71,6 +71,7 @@ const variants = {
   production: {
     name: "Paseo",
     packageId: "sh.paseo",
+    androidPackageId: "com.norcy.paseo",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_PROD",
       fallbackRelativePath: "./.secrets/google-services.prod.json",
@@ -83,6 +84,7 @@ const variants = {
   development: {
     name: "Paseo Debug",
     packageId: "sh.paseo.debug",
+    androidPackageId: "sh.paseo.debug",
     googleServicesFile: resolveSecretFile({
       envKey: "GOOGLE_SERVICES_FILE_DEBUG",
       fallbackRelativePath: "./.secrets/google-services.debug.json",
@@ -130,7 +132,7 @@ export default {
       // Allow HTTP connections for local network hosts (required for release builds)
       usesCleartextTraffic: true,
       permissions: buildProfile.androidPermissions,
-      package: variant.packageId,
+      package: variant.androidPackageId,
       versionCode: nativeReleaseVersion.androidVersionCode,
       ...(variant.googleServicesFile ? { googleServicesFile: variant.googleServicesFile } : {}),
     },
