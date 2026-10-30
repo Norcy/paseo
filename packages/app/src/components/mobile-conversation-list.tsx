@@ -292,6 +292,7 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: getStatusDotColor({ theme, bucket: "attention" }) ?? undefined,
   },
   moreButton: {
+    marginRight: -6,
     width: 32,
     height: 32,
     alignItems: "center",
