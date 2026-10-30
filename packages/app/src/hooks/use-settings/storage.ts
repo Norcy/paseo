@@ -55,7 +55,7 @@ export const DEFAULT_TERMINAL_SCROLLBACK_LINES = 10_000;
 export const MIN_TERMINAL_SCROLLBACK_LINES = 0;
 export const MAX_TERMINAL_SCROLLBACK_LINES = 1_000_000;
 export function defaultUiBaseFontSize(native: boolean): number {
-  return native ? 15 : FONT_SIZE.base;
+  return native ? 16 : FONT_SIZE.base;
 }
 
 export const DEFAULT_UI_BASE_FONT_SIZE = defaultUiBaseFontSize(isNative);
@@ -86,7 +86,7 @@ export interface AppSettings {
   terminalScrollbackLines: number;
   uiFontFamily: string; // "" = platform default UI stack
   monoFontFamily: string; // "" = platform default mono stack
-  uiBaseFontSize: number; // clamped px, platform default 14 or 15
+  uiBaseFontSize: number; // clamped px, platform default 14 or 16
   contentFontSize: number; // clamped px, platform default 15 or 16
   codeFontSize: number; // clamped px, default 12
   /** Max width of chat and markdown content in px; null follows the current default. */
@@ -142,7 +142,7 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   theme: DEFAULT_THEME_PREFERENCE,
   pluginThemeId: null,
   language: "system",
-  sendBehavior: "steer",
+  sendBehavior: "queue",
   serviceUrlBehavior: "ask",
   terminalScrollbackLines: DEFAULT_TERMINAL_SCROLLBACK_LINES,
   uiFontFamily: "",
@@ -156,8 +156,13 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   sidebarWorkspaceTrailing: "timestamp",
   sidebarRowItems: DEFAULT_SIDEBAR_ROW_ITEMS,
   sidebarChecksDisplay: DEFAULT_SIDEBAR_CHECKS_DISPLAY,
-  sidebarNavItems: [],
-  sidebarFooterItems: [],
+  sidebarNavItems: [
+    { key: "new-workspace", visible: false },
+    { key: "history", visible: false },
+    { key: "search", visible: true },
+    { key: "schedules", visible: false },
+  ],
+  sidebarFooterItems: [{ key: "usage", visible: true }],
   usage: DEFAULT_USAGE_PREFERENCES,
   autoExpandReasoning: false,
   chatDisplay: "collapseTurns",
@@ -222,7 +227,9 @@ const StoredAppSettingsSchema = z
     language: z
       .enum(["system", "ar", "en", "es", "fr", "ja", "ko", "pt-BR", "ru", "zh-CN"])
       .catch("system"),
-    sendBehavior: z.enum(["interrupt", "steer", "queue"]).catch("steer"),
+    sendBehavior: z
+      .enum(["interrupt", "steer", "queue"])
+      .catch(DEFAULT_CLIENT_SETTINGS.sendBehavior),
     serviceUrlBehavior: z.enum(["ask", "in-app", "external"]).catch("ask"),
     terminalScrollbackLines: clampedNumber(
       MIN_TERMINAL_SCROLLBACK_LINES,

@@ -71,11 +71,32 @@ describe("loadAppSettingsFromStorage", () => {
     },
   );
 
-  it("preserves a persisted steer send behavior", async () => {
+  it("preserves existing font, sending, usage, and sidebar choices", async () => {
+    const preferences = {
+      uiBaseFontSize: 15,
+      sendBehavior: "steer",
+      usage: { displayAs: "used", pins: null, serverId: null },
+      sidebarNavItems: [
+        { key: "history", visible: true },
+        { key: "search", visible: false },
+      ],
+      sidebarFooterItems: [{ key: "usage", visible: false }],
+    };
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
-        "@paseo:app-settings": JSON.stringify({ sendBehavior: "steer" }),
+        [APP_SETTINGS_KEY]: JSON.stringify(preferences),
       }),
+    });
+    expect(await loadAppSettingsFromStorage(deps)).toMatchObject(preferences);
+  });
+
+  it("uses Queue by default and still allows choosing Steer", async () => {
+    const deps = makeDeps();
+    expect((await loadAppSettingsFromStorage(deps)).sendBehavior).toBe("queue");
+    await saveAppSettings({
+      queryClient: new QueryClient(),
+      deps,
+      updates: { sendBehavior: "steer" },
     });
     expect((await loadAppSettingsFromStorage(deps)).sendBehavior).toBe("steer");
   });
@@ -260,12 +281,17 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.sendShortcut).toBe("enter");
   });
 
-  it("defaults sidebar navigation items to an empty preference list", async () => {
+  it("shows only Search in the header on a fresh install", async () => {
     const deps = makeDeps();
 
     const result = await loadAppSettingsFromStorage(deps);
 
-    expect(result.sidebarNavItems).toEqual([]);
+    expect(result.sidebarNavItems).toEqual([
+      { key: "new-workspace", visible: false },
+      { key: "history", visible: false },
+      { key: "search", visible: true },
+      { key: "schedules", visible: false },
+    ]);
   });
 
   it("loads stored sidebar navigation items in order", async () => {
@@ -300,8 +326,10 @@ describe("loadAppSettingsFromStorage", () => {
     expect(result.sidebarNavItems).toEqual([]);
   });
 
-  it("loads stored sidebar footer items in order and defaults them to empty", async () => {
-    expect((await loadAppSettingsFromStorage(makeDeps())).sidebarFooterItems).toEqual([]);
+  it("shows Usage in the footer on a fresh install and preserves stored visibility", async () => {
+    expect((await loadAppSettingsFromStorage(makeDeps())).sidebarFooterItems).toEqual([
+      { key: "usage", visible: true },
+    ]);
 
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
@@ -327,7 +355,7 @@ describe("loadAppSettingsFromStorage", () => {
 
   it("loads legacy usage pins in order and defaults a fresh device to source defaults", async () => {
     expect((await loadAppSettingsFromStorage(makeDeps())).usage).toEqual({
-      displayAs: "used",
+      displayAs: "remaining",
       pins: null,
       serverId: null,
     });
@@ -386,7 +414,7 @@ describe("loadAppSettingsFromStorage", () => {
     });
 
     expect((await loadAppSettingsFromStorage(deps)).usage).toEqual({
-      displayAs: "used",
+      displayAs: "remaining",
       pins: [{ sourceId: "claude", windowId: "weekly" }],
       serverId: null,
     });
@@ -489,6 +517,8 @@ describe("loadAppSettingsFromStorage", () => {
       theme: "dark",
       contentFontSize: DEFAULT_UI_BASE_FONT_SIZE,
       chatDisplay: "full",
+      sidebarNavItems: [],
+      sidebarFooterItems: [],
     });
     expect(JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null")).toEqual({
       manageBuiltInDaemon: false,
@@ -560,7 +590,10 @@ describe("saveAppSettings", () => {
   it("applies consecutive functional updates to the latest cached settings", async () => {
     const deps = makeDeps();
     const queryClient = new QueryClient();
-    queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, DEFAULT_CLIENT_SETTINGS);
+    queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, {
+      ...DEFAULT_CLIENT_SETTINGS,
+      sidebarNavItems: [],
+    });
 
     await Promise.all([
       saveAppSettings({
@@ -628,6 +661,8 @@ describe("loadSettingsFromStorage", () => {
       theme: "light",
       contentFontSize: DEFAULT_UI_BASE_FONT_SIZE,
       chatDisplay: "full",
+      sidebarNavItems: [],
+      sidebarFooterItems: [],
     });
   });
 
@@ -673,6 +708,8 @@ describe("loadSettingsFromStorage", () => {
       theme: "light",
       contentFontSize: DEFAULT_UI_BASE_FONT_SIZE,
       chatDisplay: "full",
+      sidebarNavItems: [],
+      sidebarFooterItems: [],
       manageBuiltInDaemon: false,
       releaseChannel: "beta",
     });
@@ -695,6 +732,8 @@ describe("loadSettingsFromStorage", () => {
       theme: "light",
       contentFontSize: DEFAULT_UI_BASE_FONT_SIZE,
       chatDisplay: "full",
+      sidebarNavItems: [],
+      sidebarFooterItems: [],
     });
   });
 });
@@ -771,6 +810,8 @@ describe("saveAppSettings", () => {
       theme: "light",
       contentFontSize: DEFAULT_UI_BASE_FONT_SIZE,
       chatDisplay: "collapseToolCalls",
+      sidebarNavItems: [],
+      sidebarFooterItems: [],
     });
   });
 
@@ -889,8 +930,8 @@ describe("appearance settings", () => {
     expect((await loadAppSettingsFromStorage(deps)).sidebarChecksDisplay).toBe("icon");
   });
 
-  it("uses a 15px mobile base and a 14px web base", () => {
-    expect(defaultUiBaseFontSize(true)).toBe(15);
+  it("uses a 16px mobile base and a 14px web base", () => {
+    expect(defaultUiBaseFontSize(true)).toBe(16);
     expect(defaultUiBaseFontSize(false)).toBe(14);
   });
 

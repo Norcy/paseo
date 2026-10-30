@@ -21,7 +21,7 @@ export interface UsagePreferences {
 }
 
 export const DEFAULT_USAGE_PREFERENCES: UsagePreferences = {
-  displayAs: "used",
+  displayAs: "remaining",
   pins: null,
   serverId: null,
 };
@@ -30,7 +30,7 @@ const pinsSchema = z.array(z.object({ sourceId: z.string(), windowId: z.string()
 
 export const UsagePreferencesSchema = z
   .object({
-    displayAs: z.enum(["used", "remaining"]).catch("used"),
+    displayAs: z.enum(["used", "remaining"]).catch(DEFAULT_USAGE_PREFERENCES.displayAs),
     pins: pinsSchema.nullable().optional().catch(null),
     // COMPAT(usagePinSelection): added in v0.11, remove after 2027-04-02.
     // Old [] meant defaults. Read it only when the new selection is absent.
