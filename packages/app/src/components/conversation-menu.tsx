@@ -95,12 +95,7 @@ export function ConversationMenu({ agent, children }: { agent: Agent; children: 
     <>
       <DropdownMenu compactMode="sheet">
         {children}
-        <DropdownMenuContent
-          align="end"
-          width={210}
-          sheetTitle={agent.title || t("sidebar.actions.newConversation", "New conversation")}
-          testID="conversation-menu"
-        >
+        <DropdownMenuContent align="end" width={210} testID="conversation-menu">
           <View style={styles.actions}>
             <DropdownMenuItem
               leading={renameIcon}
