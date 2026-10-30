@@ -10,7 +10,20 @@ function withAndroidDebuggable(config, enabled) {
     }
 
     // Keep the release build type so the bundled JS runs without Metro.
-    application.$["android:debuggable"] = String(enabled);
+    const ignoredChecks = new Set((application.$["tools:ignore"] ?? "").split(",").filter(Boolean));
+    if (enabled) {
+      application.$["android:debuggable"] = "true";
+      ignoredChecks.add("HardcodedDebugMode");
+      modConfig.modResults.manifest.$["xmlns:tools"] = "http://schemas.android.com/tools";
+    } else {
+      delete application.$["android:debuggable"];
+      ignoredChecks.delete("HardcodedDebugMode");
+    }
+    if (ignoredChecks.size > 0) {
+      application.$["tools:ignore"] = [...ignoredChecks].join(",");
+    } else {
+      delete application.$["tools:ignore"];
+    }
     return modConfig;
   });
 }
