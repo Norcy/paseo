@@ -1,8 +1,14 @@
+import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
 import { AgentUsage } from "@/usage";
-import { formatTokenCount } from "./context-window-meter.utils";
+import { useSessionStore } from "@/stores/session-store";
+import {
+  formatSessionCost,
+  getUsagePercentage,
+  formatTokenCount,
+} from "./context-window-meter.utils";
 
 interface ContextWindowDetailsProps {
   serverId: string;
@@ -60,7 +66,45 @@ export function ContextWindowDetails({
   );
 }
 
+export function AgentContextWindowDetails({
+  serverId,
+  agentId,
+}: {
+  serverId: string;
+  agentId: string;
+}) {
+  const usage = useSessionStore(
+    (state) => state.sessions[serverId]?.agents.get(agentId)?.lastUsage,
+  );
+  const maxTokens = usage?.contextWindowMaxTokens ?? null;
+  const usedTokens = usage?.contextWindowUsedTokens ?? null;
+  const percentage =
+    maxTokens !== null && usedTokens !== null ? getUsagePercentage(maxTokens, usedTokens) : null;
+  const context = useMemo(
+    () =>
+      percentage !== null && maxTokens !== null && usedTokens !== null
+        ? { percentage: Math.round(percentage), maxTokens, usedTokens }
+        : null,
+    [percentage, maxTokens, usedTokens],
+  );
+  return (
+    <View style={styles.menuDetails}>
+      <ContextWindowDetails
+        serverId={serverId}
+        agentId={agentId}
+        context={context}
+        sessionCost={
+          typeof usage?.totalCostUsd === "number" ? formatSessionCost(usage.totalCostUsd) : null
+        }
+        showTitle={false}
+        refreshable
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
+  menuDetails: { padding: theme.spacing[4], gap: theme.spacing[4] },
   summary: {
     gap: theme.spacing[1.5],
     minWidth: 200,

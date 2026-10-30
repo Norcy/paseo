@@ -45,16 +45,6 @@ const successMapping = (theme: Theme) => ({ color: theme.colors.palette.green[50
  */
 const MENU_ITEM_LINE_HEIGHT = 18;
 
-/**
- * Space between two rows, owned by the page rather than the rows. Zero because only one row is
- * ever filled at a time, so a gap here buys nothing on the common frame and only costs pitch.
- *
- * This is the knob a redesign turns. Note it applies to a page's direct children, so a group of
- * rows wrapped in a `View` of its own would not receive it — at zero there is nothing to lose,
- * but anything above it wants the wrapper to carry the same style.
- */
-const MENU_ROW_GAP = 0;
-
 /** Action status for menu items with loading/success feedback. */
 export type ActionStatus = "idle" | "pending" | "success";
 
@@ -382,8 +372,8 @@ export function MenuItem({
 
 const styles = StyleSheet.create((theme) => ({
   page: {
-    paddingVertical: theme.spacing[1],
-    gap: MENU_ROW_GAP,
+    paddingVertical: { xs: theme.spacing[4], md: theme.spacing[1] },
+    gap: { xs: theme.spacing[2], md: 0 },
   },
   labelContainer: {
     paddingHorizontal: theme.spacing[3],

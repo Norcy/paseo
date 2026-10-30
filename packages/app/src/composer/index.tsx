@@ -2091,7 +2091,7 @@ function ComposerContentImpl({
   const contextWindowMeterGlyphSize = isCompactLayout ? ICON_SIZE.md : buttonIconSize;
   const beforeVoiceContent = useMemo(
     () =>
-      hasAgent ? (
+      hasAgent && !(Platform.OS === "android" && isCompactFormFactor) ? (
         <View style={styles.contextWindowMeterSlot}>
           <ContextWindowMeter
             serverId={serverId}
@@ -2111,6 +2111,7 @@ function ComposerContentImpl({
       agentState.contextWindowUsedTokens,
       agentState.totalCostUsd,
       contextWindowMeterGlyphSize,
+      isCompactFormFactor,
     ],
   );
 

@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { CompactHeader } from "@/components/headers/compact-header";
@@ -30,14 +31,16 @@ export function CompactWorkspaceHeader({
   const { t } = useTranslation();
   const actions = (
     <>
-      <WorkspaceExplorerToggle
-        onPress={onToggleExplorer}
-        label={explorerToggleLabel}
-        tooltipLabel={t("workspace.tabs.explorerSidebar.toggle")}
-        tooltipKeys={EXPLORER_TOGGLE_KEYS}
-        accessibilityState={explorerToggleAccessibilityState}
-        mobile
-      />
+      {Platform.OS !== "android" && (
+        <WorkspaceExplorerToggle
+          onPress={onToggleExplorer}
+          label={explorerToggleLabel}
+          tooltipLabel={t("workspace.tabs.explorerSidebar.toggle")}
+          tooltipKeys={EXPLORER_TOGGLE_KEYS}
+          accessibilityState={explorerToggleAccessibilityState}
+          mobile
+        />
+      )}
       {children}
     </>
   );

@@ -3417,6 +3417,8 @@ function WorkspaceScreenContent({
             <ConversationHeaderMenu
               serverId={normalizedServerId}
               agentId={getActiveConversationAgentId(activeTab)}
+              onToggleExplorer={handleToggleExplorerSidebar}
+              explorerLabel={explorerSidebarToggleLabel}
             />
           ) : (
             <WorkspaceHeaderMenuMobile

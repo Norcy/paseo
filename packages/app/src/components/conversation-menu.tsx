@@ -1,8 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
-import { View } from "react-native";
-import { StyleSheet } from "react-native-unistyles";
 import { useQueryClient } from "@tanstack/react-query";
-import { Archive, Ellipsis, Pencil } from "lucide-react-native";
+import { Archive, Ellipsis, Pencil, PanelRight, ChartPie } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { AdaptiveRenameModal } from "@/components/rename-modal";
 import { DensityIcon } from "@/components/ui/density-icon";
@@ -11,13 +9,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSubTrigger,
+  type MenuPageDefinition,
 } from "@/components/ui/dropdown-menu";
 import { useIconButtonChromeStyle } from "@/components/ui/icon-button-chrome";
 import { useToast } from "@/contexts/toast-context";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { useSessionStore, type Agent } from "@/stores/session-store";
+import { AgentContextWindowDetails } from "@/components/context-window-details";
 import { confirmDialog } from "@/utils/confirm-dialog";
 
+const explorerIcon = <DensityIcon icon={PanelRight} size="xs" color="foregroundMuted" />;
+const contextIcon = <DensityIcon icon={ChartPie} size="xs" color="foregroundMuted" />;
 const archiveIcon = <DensityIcon icon={Archive} size="xs" color="foregroundMuted" />;
 const renameIcon = <DensityIcon icon={Pencil} size="xs" color="foregroundMuted" />;
 const headerHitSlop = { top: 8, bottom: 8 } as const;
@@ -25,19 +28,44 @@ const headerHitSlop = { top: 8, bottom: 8 } as const;
 export function ConversationHeaderMenu({
   serverId,
   agentId,
+  onToggleExplorer,
+  explorerLabel,
 }: {
   serverId: string;
   agentId: string | null;
+  onToggleExplorer: () => void;
+  explorerLabel: string;
 }) {
   const { t } = useTranslation();
   const triggerStyle = useIconButtonChromeStyle({ size: "large" });
   const agent = useSessionStore((state) =>
     agentId ? state.sessions[serverId]?.agents.get(agentId) : undefined,
   );
-  if (!agent) return null;
+  const pages: MenuPageDefinition[] = agentId
+    ? [
+        {
+          id: "context",
+          title: t("contextWindow.title"),
+          hoverIntent: false,
+          content: <AgentContextWindowDetails serverId={serverId} agentId={agentId} />,
+        },
+      ]
+    : [];
+  const actions = (
+    <>
+      <DropdownMenuItem leading={explorerIcon} onSelect={onToggleExplorer}>
+        {explorerLabel}
+      </DropdownMenuItem>
+      {agentId ? (
+        <DropdownMenuSubTrigger id="context" leading={contextIcon}>
+          {t("contextWindow.title")}
+        </DropdownMenuSubTrigger>
+      ) : null}
+    </>
+  );
 
   return (
-    <ConversationMenu key={`${agent.serverId}:${agent.id}`} agent={agent}>
+    <ConversationMenu key={`${serverId}:${agentId}`} agent={agent} actions={actions} pages={pages}>
       <DropdownMenuTrigger
         style={triggerStyle}
         hitSlop={headerHitSlop}
@@ -51,17 +79,32 @@ export function ConversationHeaderMenu({
   );
 }
 
-export function ConversationMenu({ agent, children }: { agent: Agent; children: ReactNode }) {
+export function ConversationMenu({
+  agent,
+  children,
+  actions,
+  pages,
+}: {
+  agent?: Agent;
+  children: ReactNode;
+  actions?: ReactNode;
+  pages?: MenuPageDefinition[];
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const [renaming, setRenaming] = useState(false);
-  const client = useSessionStore((state) => state.sessions[agent.serverId]?.client ?? null);
+  const client = useSessionStore((state) =>
+    agent ? (state.sessions[agent.serverId]?.client ?? null) : null,
+  );
   const queryClient = useQueryClient();
   const { archiveAgent, isArchivingAgent } = useArchiveAgent();
-  const archiving = isArchivingAgent({ serverId: agent.serverId, agentId: agent.id });
+  const archiving = agent
+    ? isArchivingAgent({ serverId: agent.serverId, agentId: agent.id })
+    : false;
   const handleRename = useCallback(() => setRenaming(true), []);
   const handleRenameClose = useCallback(() => setRenaming(false), []);
   const handleArchive = useCallback(() => {
+    if (!agent) return;
     void (async () => {
       if (
         agent.status === "running" &&
@@ -79,57 +122,55 @@ export function ConversationMenu({ agent, children }: { agent: Agent; children: 
     })().catch((error: unknown) => {
       toast.error(String(error));
     });
-  }, [agent.id, agent.serverId, agent.status, archiveAgent, t, toast]);
+  }, [agent, archiveAgent, t, toast]);
   const handleRenameSubmit = useCallback(
     async (title: string) => {
-      if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
+      if (!client || !agent) throw new Error(t("workspace.terminal.hostDisconnected"));
       await client.updateAgent(agent.id, { name: title.trim() });
       void queryClient.invalidateQueries({ queryKey: ["sidebarAgentsList", agent.serverId] });
       void queryClient.invalidateQueries({ queryKey: ["allAgents", agent.serverId] });
       setRenaming(false);
     },
-    [agent.id, agent.serverId, client, queryClient, t],
+    [agent, client, queryClient, t],
   );
 
   return (
     <>
       <DropdownMenu compactMode="sheet">
         {children}
-        <DropdownMenuContent align="end" width={210} testID="conversation-menu">
-          <View style={styles.actions}>
-            <DropdownMenuItem
-              leading={renameIcon}
-              onSelect={handleRename}
-              disabled={!client || archiving}
-            >
-              {t("workspace.tabs.menu.rename")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              leading={archiveIcon}
-              onSelect={handleArchive}
-              disabled={!client || archiving}
-            >
-              {t("agentList.archiveSheet.archive")}
-            </DropdownMenuItem>
-          </View>
+        <DropdownMenuContent align="end" width={210} testID="conversation-menu" pages={pages}>
+          {actions}
+          {agent ? (
+            <>
+              <DropdownMenuItem
+                leading={renameIcon}
+                onSelect={handleRename}
+                disabled={!client || archiving}
+              >
+                {t("workspace.tabs.menu.rename")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                leading={archiveIcon}
+                onSelect={handleArchive}
+                disabled={!client || archiving}
+              >
+                {t("agentList.archiveSheet.archive")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
-      <AdaptiveRenameModal
-        visible={renaming}
-        title={t("workspace.tabs.menu.renameAgent")}
-        initialValue={agent.title || ""}
-        submitLabel={t("workspace.tabs.menu.rename")}
-        maxLength={200}
-        onClose={handleRenameClose}
-        onSubmit={handleRenameSubmit}
-      />
+      {agent ? (
+        <AdaptiveRenameModal
+          visible={renaming}
+          title={t("workspace.tabs.menu.renameAgent")}
+          initialValue={agent.title || ""}
+          submitLabel={t("workspace.tabs.menu.rename")}
+          maxLength={200}
+          onClose={handleRenameClose}
+          onSubmit={handleRenameSubmit}
+        />
+      ) : null}
     </>
   );
 }
-
-const styles = StyleSheet.create((theme) => ({
-  actions: {
-    paddingVertical: theme.spacing[4],
-    gap: theme.spacing[2],
-  },
-}));
