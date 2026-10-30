@@ -250,6 +250,7 @@ interface SidebarWorkspaceListProps {
 }
 
 interface ProjectHeaderRowProps {
+  showProjectIcon?: boolean;
   createAction?: ReactElement;
   showCollapseIndicator?: boolean;
   project: SidebarProjectEntry;
@@ -893,6 +894,7 @@ function ProjectRowTitle({
 }
 
 function ProjectHeaderRow({
+  showProjectIcon,
   createAction,
   showCollapseIndicator = false,
   project,
@@ -990,16 +992,18 @@ function ProjectHeaderRow({
   const rowChildren = (
     <>
       <View style={styles.projectRowLeft}>
-        <ProjectLeadingVisual
-          displayName={displayName}
-          iconDataUri={iconDataUri}
-          statusBucket={statusBucket}
-          projectViewKey={project.viewKey}
-          backdrop={getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered })}
-          chevron={chevron}
-          showChevron={isHovered && !showCollapseIndicator}
-          isArchiving={isArchiving}
-        />
+        {showProjectIcon !== false ? (
+          <ProjectLeadingVisual
+            displayName={displayName}
+            iconDataUri={iconDataUri}
+            statusBucket={statusBucket}
+            projectViewKey={project.viewKey}
+            backdrop={getSidebarRowBackdrop({ isDragging, isPressed, selected, isHovered })}
+            chevron={chevron}
+            showChevron={isHovered && !showCollapseIndicator}
+            isArchiving={isArchiving}
+          />
+        ) : null}
 
         <ProjectRowTitle
           displayName={displayName}
@@ -1648,13 +1652,11 @@ function useProjectRemoval(project: SidebarProjectEntry, displayName: string) {
 
 export function SidebarProjectHeader({
   project,
-  iconDataUri,
   collapsed,
   onToggleCollapsed,
   createAction,
 }: {
   project: SidebarProjectEntry;
-  iconDataUri: string | null;
   collapsed: boolean;
   onToggleCollapsed: (projectViewKey: string) => void;
   createAction: ReactElement;
@@ -1671,7 +1673,8 @@ export function SidebarProjectHeader({
     <ProjectHeaderRow
       project={project}
       displayName={project.projectName}
-      iconDataUri={iconDataUri}
+      iconDataUri={null}
+      showProjectIcon={false}
       statusBucket={null}
       chevron={collapsed ? "expand" : "collapse"}
       onPress={handlePress}

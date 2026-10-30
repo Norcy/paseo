@@ -16,8 +16,6 @@ import {
   useSidebarWorkspacesList,
   type SidebarProjectEntry,
 } from "@/hooks/use-sidebar-workspaces-list";
-import { resolveSidebarProjectIconTargets } from "@/utils/sidebar-project-row-model";
-import { useProjectIcons } from "@/projects/icons";
 import { ScrollView, Text, View } from "react-native";
 import { PressHighlight } from "@/components/ui/press-highlight";
 import { useTranslation } from "react-i18next";
@@ -69,8 +67,6 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
       }),
     [projects, sessions],
   );
-  const iconTargets = useMemo(() => resolveSidebarProjectIconTargets(projects), [projects]);
-  const projectIcons = useProjectIcons({ projects: iconTargets });
   const emptyLabel = t("sidebar.empty.noConversations", "No conversations yet");
   const newLabel = t("sidebar.actions.newConversation", "New conversation");
 
@@ -84,7 +80,6 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
             <View key={group.project.viewKey} style={styles.group}>
               <ProjectGroupHeader
                 project={group.project}
-                iconDataUri={projectIcons.get(group.project.viewKey) ?? null}
                 newLabel={newLabel}
                 onSelect={onSelect}
                 collapsed={collapsedProjectKeys.has(group.project.viewKey)}
@@ -114,14 +109,12 @@ export function MobileConversationList({ onSelect }: { onSelect: () => void }) {
 
 function ProjectGroupHeader({
   project,
-  iconDataUri,
   newLabel,
   onSelect,
   collapsed,
   onToggleCollapsed,
 }: {
   project: SidebarProjectEntry;
-  iconDataUri: string | null;
   newLabel: string;
   onSelect: () => void;
   collapsed: boolean;
@@ -163,7 +156,6 @@ function ProjectGroupHeader({
   return (
     <SidebarProjectHeader
       project={project}
-      iconDataUri={iconDataUri}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
       createAction={createAction}
