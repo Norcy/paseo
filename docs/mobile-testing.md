@@ -44,7 +44,7 @@ ANDROID_SERIAL=emulator-5554 node packages/app/e2e/mobile/terminal-keyboard/andr
 
 Use a real docked software keyboard. The harness taps Ctrl, Esc, and Enter and checks Android's
 focused input identity and IME hide/show events. It saves screenshots and logs under
-`.dev/agent-device-artifacts/terminal-keyboard-android`. Set `PASEO_TERMINAL_KEYBOARD_APP_ID=sh.paseo`
+`.dev/agent-device-artifacts/terminal-keyboard-android`. Set `PASEO_TERMINAL_KEYBOARD_APP_ID=com.norcy.paseo`
 to test an installed production build. It never submits a chat message.
 
 `npm run test:e2e:composer-keyboard:android` preserves the chat control and
