@@ -93,12 +93,10 @@ npm run dev:ios         # Build/install the iOS development app
 `build:apk` writes `artifacts/paseo-dogfood-universal.apk`; `build:apk:arm64` writes
 `artifacts/paseo-dogfood-arm64.apk`. Neither command launches or installs on a device. Both enable
 `PASEO_WATCHDOG_BUILD=1`, the production React profiling renderer, and Android's shell-profileable
-and debuggable flags. An authorized ADB connection can use `run-as com.norcy.paseo` to read
-the app's private settings. These builds keep the production package ID (`com.norcy.paseo`),
-release optimizations, and bundled JavaScript; Metro is not required. Use this APK for
+flag. These builds keep the production package ID (`com.norcy.paseo`) and release optimizations. Use this APK for
 personal dogfooding. Android system-trace spans require the separate `PASEO_PROFILE_BUILD=1` flag;
 watchdog recording does not send duplicate spans to that sink by default. Normal store/release
-workflows leave diagnostics and the debuggable flag disabled.
+workflows leave diagnostics disabled.
 
 The older `android`, `android:development`, and `ios` commands remain aliases for development.
 `android:production` still builds and installs a release through Expo; use `build:apk` when you
