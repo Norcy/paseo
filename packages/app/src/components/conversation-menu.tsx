@@ -1,4 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
+import { View } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
 import { useQueryClient } from "@tanstack/react-query";
 import { Archive, Ellipsis, Pencil } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
@@ -99,20 +101,22 @@ export function ConversationMenu({ agent, children }: { agent: Agent; children: 
           sheetTitle={agent.title || t("sidebar.actions.newConversation", "New conversation")}
           testID="conversation-menu"
         >
-          <DropdownMenuItem
-            leading={archiveIcon}
-            onSelect={handleArchive}
-            disabled={!client || archiving}
-          >
-            {t("agentList.archiveSheet.archive")}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            leading={renameIcon}
-            onSelect={handleRename}
-            disabled={!client || archiving}
-          >
-            {t("workspace.tabs.menu.rename")}
-          </DropdownMenuItem>
+          <View style={styles.actions}>
+            <DropdownMenuItem
+              leading={renameIcon}
+              onSelect={handleRename}
+              disabled={!client || archiving}
+            >
+              {t("workspace.tabs.menu.rename")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              leading={archiveIcon}
+              onSelect={handleArchive}
+              disabled={!client || archiving}
+            >
+              {t("agentList.archiveSheet.archive")}
+            </DropdownMenuItem>
+          </View>
         </DropdownMenuContent>
       </DropdownMenu>
       <AdaptiveRenameModal
@@ -127,3 +131,10 @@ export function ConversationMenu({ agent, children }: { agent: Agent; children: 
     </>
   );
 }
+
+const styles = StyleSheet.create((theme) => ({
+  actions: {
+    paddingVertical: theme.spacing[4],
+    gap: theme.spacing[2],
+  },
+}));
