@@ -18,7 +18,7 @@ interface CompactWorkspaceHeaderProps {
   onToggleExplorer: () => void;
   explorerToggleLabel: string;
   explorerToggleAccessibilityState: { expanded: boolean };
-  /** Tab switcher and workspace menu, before the explorer toggle. */
+  /** Tab switcher and conversation menu, after the explorer toggle. */
   children: ReactNode;
 }
 
@@ -47,7 +47,6 @@ export function CompactWorkspaceHeader({
   );
   const actions = (
     <>
-      {children}
       <WorkspaceExplorerToggle
         onPress={onToggleExplorer}
         label={explorerToggleLabel}
@@ -56,6 +55,7 @@ export function CompactWorkspaceHeader({
         accessibilityState={explorerToggleAccessibilityState}
         mobile
       />
+      {children}
     </>
   );
 
