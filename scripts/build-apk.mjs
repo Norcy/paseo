@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const target = process.argv[2] ?? "universal";
+const target = process.argv[2] ?? "arm64";
 const architectures = {
   universal: "armeabi-v7a,arm64-v8a,x86,x86_64",
   arm64: "arm64-v8a",

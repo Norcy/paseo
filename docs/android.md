@@ -84,14 +84,16 @@ Run its native regression tests from `packages/app/android` after prebuild:
 From repo root:
 
 ```bash
-npm run build:apk       # Universal dogfood APK: 32/64-bit ARM and x86
-npm run build:apk:arm64 # Smaller dogfood APK for ARM64 phones
+npm run build:apk           # ARM64 dogfood APK for the Redmi phone
+npm run build:apk:arm64     # Explicit ARM64 alias
+npm run build:apk:universal # All four ABIs, only when explicitly requested
 npm run dev:android     # Build/install the debug app and start development
 npm run dev:ios         # Build/install the iOS development app
 ```
 
-`build:apk` writes `artifacts/paseo-dogfood-universal.apk`; `build:apk:arm64` writes
-`artifacts/paseo-dogfood-arm64.apk`. Neither command launches or installs on a device. Both enable
+`build:apk` and `build:apk:arm64` write `artifacts/paseo-dogfood-arm64.apk`;
+`build:apk:universal` writes `artifacts/paseo-dogfood-universal.apk`. These commands do not
+launch or install on a device. All enable
 `PASEO_WATCHDOG_BUILD=1`, the production React profiling renderer, and Android's shell-profileable
 flag. These builds keep the production package ID (`com.norcy.paseo`) and release optimizations. Use this APK for
 personal dogfooding. Android system-trace spans require the separate `PASEO_PROFILE_BUILD=1` flag;

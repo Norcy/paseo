@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+先读 [AGENTS.fork.md](AGENTS.fork.md)。它是本仓库的最高项目规则；与其他仓库文档冲突时，以它为准。
+
 Paseo is a mobile app for monitoring and controlling your local AI coding agents from anywhere. Your dev environment, in your pocket. Connects directly to your actual development environment — your code stays on your machine.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot, OpenCode, Pi, Antigravity, and Muse Code.
@@ -20,8 +22,6 @@ This is an npm workspace monorepo:
 `docs/` is the source of truth for system-level and process-level knowledge. **"The docs", "check the docs", or "check the X docs" always mean this directory — not the web.** Look here before fetching anything online; the docs capture gotchas and conventions you cannot derive from the code or external sources.
 
 At the start of non-trivial work, list `docs/` and skim anything relevant to the task.
-
-本项目的定制 Change log 是 [docs/fork-changes.md](docs/fork-changes.md)。以后新增、修改或移除自定义功能时，必须随代码同步更新这份文档，从用户视角说明当前行为、与上游的差异及适用平台。更新已有条目，删除失效内容，不只追加流水记录；代码与文档一起完成验证和提交。
 
 | Doc                                                                  | What's in it                                                                                                                   |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -113,8 +113,6 @@ npm run format:check                 # Check formatting without writing
 ```
 
 Repo dev commands use checkout-local state by default. In this checkout, `PASEO_HOME` resolves to `.dev/paseo-home`, and `npm run cli -- ...` targets that same dev home automatically. The packaged desktop app and production-style daemon keep using `~/.paseo` on port `6767`.
-
-When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: writes `artifacts/paseo-dogfood-arm64.apk` with diagnostics without starting a device; `npm run build:apk` builds all four Android architectures.
 
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
