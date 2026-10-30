@@ -3409,9 +3409,6 @@ function WorkspaceScreenContent({
             activeConversationTitle,
             workspaceHeaderTitle,
           )}
-          subtitle={workspaceHeaderSubtitle}
-          isSubtitleDistinct={isWorkspaceHeaderSubtitleDistinct}
-          serverId={normalizedServerId}
           onToggleExplorer={handleToggleExplorerSidebar}
           explorerToggleLabel={explorerSidebarToggleLabel}
           explorerToggleAccessibilityState={explorerSidebarToggleAccessibilityState}
@@ -3459,14 +3456,12 @@ function WorkspaceScreenContent({
       handleToggleExplorerSidebar,
       isMobile,
       isWorkspaceHeaderLoading,
-      isWorkspaceHeaderSubtitleDistinct,
       normalizedServerId,
       normalizedWorkspaceId,
       openImportSheet,
       showCreateBrowserTab,
       showWorkspaceSetup,
       workspaceDirectory,
-      workspaceHeaderSubtitle,
       workspaceHeaderTitle,
     ],
   );
