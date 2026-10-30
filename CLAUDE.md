@@ -15,12 +15,6 @@ This is an npm workspace monorepo:
 - `packages/desktop` — Electron desktop wrapper
 - `packages/website` — Marketing site (paseo.sh)
 
-## Custom change log
-
-- Android sidebar: conversations from all projects, per-project new conversation, status indicators, and per-conversation archive/rename actions.
-- Android chat: hide workspace tabs and show the active conversation title.
-- Android composer: keep the original input width, scroll queued messages in a bounded area, and hide voice controls.
-
 ## Docs
 
 `docs/` is the source of truth for system-level and process-level knowledge. **"The docs", "check the docs", or "check the X docs" always mean this directory — not the web.** Look here before fetching anything online; the docs capture gotchas and conventions you cannot derive from the code or external sources.
@@ -29,6 +23,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 
 | Doc                                                                  | What's in it                                                                                                                   |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [docs/fork-changes.md](docs/fork-changes.md)                         | 本项目相对上游的用户体验差异；修改定制功能前先读，变更后同步更新                                                               |
 | [docs/product.md](docs/product.md)                                   | What Paseo is, who it's for, where it's going                                                                                  |
 | [docs/architecture.md](docs/architecture.md)                         | System design, package layering, WebSocket protocol, agent lifecycle, data flow                                                |
 | [docs/agent-lifecycle.md](docs/agent-lifecycle.md)                   | Agent states, parent/child relationships, archive semantics, tabs vs archive, subagents track                                  |
