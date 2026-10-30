@@ -21,6 +21,8 @@ This is an npm workspace monorepo:
 
 At the start of non-trivial work, list `docs/` and skim anything relevant to the task.
 
+本项目的定制 Change log 是 [docs/fork-changes.md](docs/fork-changes.md)。以后新增、修改或移除自定义功能时，必须随代码同步更新这份文档，从用户视角说明当前行为、与上游的差异及适用平台。更新已有条目，删除失效内容，不只追加流水记录；代码与文档一起完成验证和提交。
+
 | Doc                                                                  | What's in it                                                                                                                   |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | [docs/fork-changes.md](docs/fork-changes.md)                         | 本项目相对上游的用户体验差异；修改定制功能前先读，变更后同步更新                                                               |
