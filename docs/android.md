@@ -100,6 +100,11 @@ personal dogfooding. Android system-trace spans require the separate `PASEO_PROF
 watchdog recording does not send duplicate spans to that sink by default. Normal store/release
 workflows leave diagnostics disabled.
 
+Local dogfood builds retain the generated Android project and Gradle daemon. Expo SDK 57
+prebuild defaults to cleaning: keep `--no-clean` explicit to preserve native build outputs.
+Build only `:app:assembleRelease`; the unqualified task also assembles dependency AARs.
+Stage timings are printed, and Gradle task timings are saved under `packages/app/android/build/reports/profile/`.
+
 The older `android`, `android:development`, and `ios` commands remain aliases for development.
 `android:production` still builds and installs a release through Expo; use `build:apk` when you
 need an artifact. `android:clear` removes the generated Android project.
