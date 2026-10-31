@@ -87,6 +87,7 @@ From repo root:
 npm run build:apk           # ARM64 dogfood APK for the Redmi phone
 npm run build:apk:arm64     # Explicit ARM64 alias
 npm run build:apk:universal # All four ABIs, only when explicitly requested
+npm run install:apk         # Optimized ARM64 build + reinstall on one USB device
 npm run dev:android     # Build/install the debug app and start development
 npm run dev:ios         # Build/install the iOS development app
 ```

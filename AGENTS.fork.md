@@ -6,6 +6,8 @@
 
 - 日常 APK 只给用户的红米手机使用，默认只构建 `arm64-v8a`，不编译其他架构。
 - 使用 `npm run build:apk`（`build:apk:arm64` 是同用途入口），产物为 `artifacts/paseo-dogfood-arm64.apk`，保留诊断功能，不自动启动或安装到设备。
+- 用户说“编译”“打包”时，必须走上述优化构建入口；说“安装到真机”时，单台 USB 真机使用 `npm run install:apk`，它先走同一优化构建，再覆盖安装并保留数据。多台设备或无线连接时，走上述构建入口后用 `adb -s <设备序列号> install -r artifacts/paseo-dogfood-arm64.apk` 指定目标。
+- 不得改走 `android:production`、`expo run:android` 或清理式 prebuild；只有用户明确要求开发版、通用包，或已确认原生配置无法增量同步时才例外，并说明原因。
 - 只有用户明确要求通用 APK 时，才使用 `npm run build:apk:universal`。
 - 完成全部修改后再构建；需要安装时，最后统一构建并安装一次。
 
