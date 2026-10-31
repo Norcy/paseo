@@ -807,6 +807,8 @@ export interface AgentClient {
    * Archive a durable native session (best-effort). Runtime release belongs to AgentSession.close().
    * Called when Paseo archives an agent so the provider's own UI reflects the same state.
    */
+  /** Return positively confirmed native archives; absence never implies restoration. */
+  listArchivedSessionIds?(): Promise<string[]>;
   archiveNativeSession?(handle: AgentPersistenceHandle): Promise<void>;
   /**
    * Unarchive a durable native session in the provider.

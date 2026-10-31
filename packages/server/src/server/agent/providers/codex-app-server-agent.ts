@@ -7551,6 +7551,39 @@ export class CodexAppServerAgentClient implements AgentClient {
     }
   }
 
+  async listArchivedSessionIds(): Promise<string[]> {
+    const child = await this.spawnAppServer();
+    const client =
+      this.deps._createCodexClient?.(child, this.logger, () => ({})) ??
+      new CodexAppServerClient(child, this.logger);
+    try {
+      await client.request("initialize", buildCodexAppServerInitializeParams());
+      client.notify("initialized", {});
+      const ids = new Set<string>();
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const response = toObjectRecord(
+          await client.request("thread/list", {
+            archived: true,
+            modelProviders: [],
+            limit: 100,
+            ...(cursor ? { cursor } : {}),
+          }),
+        );
+        for (const thread of Array.isArray(response?.data) ? response.data : []) {
+          if (isRecord(thread) && typeof thread.id === "string") ids.add(thread.id);
+        }
+        cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
+        if (cursor && cursors.has(cursor)) throw new Error("Codex archive cursor repeated");
+        if (cursor) cursors.add(cursor);
+      } while (cursor);
+      return [...ids];
+    } finally {
+      await client.dispose();
+    }
+  }
+
   async archiveNativeSession(handle: AgentPersistenceHandle): Promise<void> {
     await this.updateNativeThreadArchiveState(handle, "archive");
   }

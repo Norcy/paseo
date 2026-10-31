@@ -6297,6 +6297,7 @@ export class Session {
         this.refreshObservationProducers();
       }
 
+      await this.agentManager.refreshNativeArchives();
       const payload = request.sync
         ? await this.readAgentDirectorySync(request)
         : await this.listFetchAgentsEntries(request);
@@ -6452,6 +6453,7 @@ export class Session {
         },
         "fetch_workspaces_request_received",
       );
+      await this.agentManager.refreshNativeArchives();
       const payload = request.sync
         ? await this.readWorkspaceDirectorySync(request)
         : await this.listFetchWorkspacesEntries(request);

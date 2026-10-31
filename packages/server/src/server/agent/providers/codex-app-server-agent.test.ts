@@ -1996,6 +1996,25 @@ describe("Codex app-server provider", () => {
     appServer.assertNoErrors();
   });
 
+  test("reads native archives across pages without resuming threads", async () => {
+    const requests: unknown[] = [];
+    const appServer = createFakeCodexAppServer({
+      "thread/list": (params) => {
+        requests.push(params);
+        return params.cursor
+          ? { data: [{ id: "older-archive" }], nextCursor: null }
+          : { data: [{ id: "recent-archive" }], nextCursor: "next" };
+      },
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+    expect(await provider.listArchivedSessionIds()).toEqual(["recent-archive", "older-archive"]);
+    expect(requests).toEqual([
+      { archived: true, modelProviders: [], limit: 100 },
+      { archived: true, modelProviders: [], limit: 100, cursor: "next" },
+    ]);
+    appServer.assertNoErrors();
+  });
+
   test("unarchives Codex when an active Paseo agent resumes an archived thread", async () => {
     const threadRequests: string[] = [];
     let resumeAttempts = 0;

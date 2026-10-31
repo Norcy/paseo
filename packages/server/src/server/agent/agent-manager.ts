@@ -1104,6 +1104,59 @@ export class AgentManager {
     return retired;
   }
 
+  private nativeArchiveRefresh?: Promise<void>;
+  private nativeArchiveRefreshedAt = 0;
+
+  async refreshNativeArchives(): Promise<void> {
+    if (this.nativeArchiveRefresh) return this.nativeArchiveRefresh;
+    if (!this.registry || Date.now() - this.nativeArchiveRefreshedAt < 15_000) return;
+    this.nativeArchiveRefresh = this.refreshNativeArchivesNow().finally(() => {
+      this.nativeArchiveRefresh = undefined;
+    });
+    return this.nativeArchiveRefresh;
+  }
+
+  private async refreshNativeArchivesNow(): Promise<void> {
+    const records = await this.requireRegistry().list();
+    await Promise.all(
+      Array.from(this.clients, async ([provider, client]) => {
+        const candidates = records.filter(
+          (record) =>
+            record.provider === provider &&
+            !record.archivedAt &&
+            record.persistence &&
+            !record.internal,
+        );
+        if (!client.listArchivedSessionIds || candidates.length === 0) return;
+        try {
+          const archived = new Set(
+            await withTimeout(
+              client.listArchivedSessionIds(),
+              IMPORTABLE_SESSION_LIST_TIMEOUT_MS,
+              `Timed out reading native archives for ${provider}`,
+            ),
+          );
+          for (const record of candidates) {
+            if (!archived.has(record.persistence!.sessionId)) continue;
+            await this.runLifecycleMutation(record.id, async () => {
+              const current = await this.requireRegistry().get(record.id);
+              if (
+                !current ||
+                current.archivedAt ||
+                current.persistence?.sessionId !== record.persistence!.sessionId
+              )
+                return;
+              await this.archiveSnapshotUnlocked(record.id, new Date().toISOString());
+            });
+          }
+        } catch (err) {
+          this.logger.warn({ err, provider }, "Failed to synchronize native archives");
+        }
+      }),
+    );
+    this.nativeArchiveRefreshedAt = Date.now();
+  }
+
   async listImportableSessions(
     options?: ImportablePersistedAgentQueryOptions,
   ): Promise<ManagedImportableSessionsResult> {

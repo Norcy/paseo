@@ -601,6 +601,7 @@ function wrapClientProvider(
           };
         }
       : undefined,
+    listArchivedSessionIds: inner.listArchivedSessionIds?.bind(inner),
     archiveNativeSession: archiveNativeSession
       ? async (handle) => await archiveNativeSession({ ...handle, provider: inner.provider })
       : undefined,
