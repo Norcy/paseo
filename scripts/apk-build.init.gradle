@@ -1,0 +1,20 @@
+// Local dogfood builds use the reachable Maven Central mirror; store builds keep their repositories.
+def redirectCentral = { repo ->
+    if (repo instanceof org.gradle.api.artifacts.repositories.MavenArtifactRepository &&
+        repo.url.host in ['repo.maven.apache.org', 'repo1.maven.org']) {
+        repo.setUrl('https://maven-central.storage-download.googleapis.com/maven2')
+    }
+}
+settingsEvaluated { settings ->
+    settings.dependencyResolutionManagement.repositories.all(redirectCentral)
+}
+allprojects { project ->
+    repositories.all(redirectCentral)
+    buildscript.repositories.all(redirectCentral)
+    afterEvaluate {
+        if (project.path == ':app') {
+            project.extensions.getByName('react').cliFile.set(
+                new File(project.rootDir, '../../../scripts/apk-expo-cli.cjs'))
+        }
+    }
+}

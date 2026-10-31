@@ -17,7 +17,11 @@ const customWebPlatform = (process.env.PASEO_WEB_PLATFORM ?? "")
   .toLowerCase();
 
 const config = getDefaultConfig(projectRoot);
-config.cacheVersion = isWatchdogBuild ? "watchdog" : "standard";
+config.cacheVersion = [
+  isWatchdogBuild ? "watchdog" : "standard",
+  isFdroidBuild ? "fdroid" : "full",
+  process.env.PASEO_PROFILE_BUILD === "1" ? "profile" : "normal",
+].join("-");
 const defaultResolveRequest = config.resolver.resolveRequest ?? resolve;
 
 // Keep app exports deterministic across dev machines and CI. Metro's Watchman

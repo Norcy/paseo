@@ -103,6 +103,10 @@ workflows leave diagnostics disabled.
 Local dogfood builds retain the generated Android project and Gradle daemon. Expo SDK 57
 prebuild defaults to cleaning: keep `--no-clean` explicit to preserve native build outputs.
 Build only `:app:assembleRelease`; the unqualified task also assembles dependency AARs.
+Local builds use Maven Central’s Google mirror to avoid the Central endpoint’s 403 responses.
+They regenerate the JS bundle while retaining Metro transformations, with separate cache identities
+for watchdog, F-Droid, and profiling modes. The local Gradle init script selects the Expo CLI wrapper;
+normal store builds keep their bundling and repository configuration.
 Stage timings are printed, and Gradle task timings are saved under `packages/app/android/build/reports/profile/`.
 
 The older `android`, `android:development`, and `ios` commands remain aliases for development.
