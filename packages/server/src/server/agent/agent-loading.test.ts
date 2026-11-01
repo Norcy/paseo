@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import { AgentManager } from "./agent-manager.js";
@@ -200,31 +200,37 @@ test("loads an archived agent's history after its working directory is removed",
   }
 });
 
-test("synchronizes only confirmed native archives, including closed agents", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "native-archive-sync-"));
-  const logger = createTestLogger();
-  const storage = new AgentStorage(path.join(root, "agents"), logger);
-  const clients = createTestAgentClients();
-  const archivedIds: string[] = [];
-  clients.codex!.listArchivedSessionIds = async () => archivedIds;
-  const manager = new AgentManager({ clients, registry: storage, logger });
-  try {
-    const archived = await manager.createAgent({ provider: "codex", cwd: root }, undefined, {
-      workspaceId: "workspace-native",
-    });
-    const active = await manager.createAgent({ provider: "codex", cwd: root }, undefined, {
-      workspaceId: "workspace-native",
-    });
-    expect(archived.persistence?.sessionId).toBeTruthy();
-    archivedIds.push(archived.persistence!.sessionId);
-    await manager.closeAgent(archived.id);
-    await manager.refreshNativeArchives();
-    expect((await storage.get(archived.id))?.archivedAt).toEqual(expect.any(String));
-    expect((await storage.get(active.id))?.archivedAt).toBeFalsy();
-  } finally {
-    for (const agent of manager.listAgents()) await manager.closeAgent(agent.id);
-    await manager.flush();
-    await storage.flush();
-    await rm(root, { recursive: true, force: true });
-  }
-});
+test.each(["live", "closed"])(
+  "synchronizes confirmed native archives for %s agents without archiving Codex again",
+  async (residency) => {
+    const root = await mkdtemp(path.join(tmpdir(), "native-archive-sync-"));
+    const logger = createTestLogger();
+    const storage = new AgentStorage(path.join(root, "agents"), logger);
+    const clients = createTestAgentClients();
+    const archivedIds: string[] = [];
+    clients.codex!.listArchivedSessionIds = async () => archivedIds;
+    const nativeArchive = vi.fn(async () => {});
+    clients.codex!.archiveNativeSession = nativeArchive;
+    const manager = new AgentManager({ clients, registry: storage, logger });
+    try {
+      const archived = await manager.createAgent({ provider: "codex", cwd: root }, undefined, {
+        workspaceId: "workspace-native",
+      });
+      const active = await manager.createAgent({ provider: "codex", cwd: root }, undefined, {
+        workspaceId: "workspace-native",
+      });
+      expect(archived.persistence?.sessionId).toBeTruthy();
+      archivedIds.push(archived.persistence!.sessionId);
+      if (residency === "closed") await manager.closeAgent(archived.id);
+      await manager.refreshNativeArchives();
+      expect(nativeArchive).not.toHaveBeenCalled();
+      expect((await storage.get(archived.id))?.archivedAt).toEqual(expect.any(String));
+      expect((await storage.get(active.id))?.archivedAt).toBeFalsy();
+    } finally {
+      for (const agent of manager.listAgents()) await manager.closeAgent(agent.id);
+      await manager.flush();
+      await storage.flush();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

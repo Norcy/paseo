@@ -1996,6 +1996,21 @@ describe("Codex app-server provider", () => {
     appServer.assertNoErrors();
   });
 
+  test("cancels a stalled native archive scan and releases its process", async () => {
+    const appServer = createFakeCodexAppServer({
+      "thread/list": () => new Promise(() => {}),
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+    const kill = vi.spyOn(appServer.child, "kill");
+    const controller = new AbortController();
+    const scan = provider.listArchivedSessionIds(controller.signal);
+    const rejected = expect(scan).rejects.toThrow("closed");
+    await appServer.waitForRequest("thread/list");
+    controller.abort();
+    await rejected;
+    expect(kill).toHaveBeenCalled();
+  });
+
   test("reads native archives across pages without resuming threads", async () => {
     const requests: unknown[] = [];
     const appServer = createFakeCodexAppServer({
@@ -2007,7 +2022,10 @@ describe("Codex app-server provider", () => {
       },
     });
     const provider = createProviderWithFakeAppServer(appServer);
-    expect(await provider.listArchivedSessionIds()).toEqual(["recent-archive", "older-archive"]);
+    expect(await provider.listArchivedSessionIds(new AbortController().signal)).toEqual([
+      "recent-archive",
+      "older-archive",
+    ]);
     expect(requests).toEqual([
       { archived: true, modelProviders: [], limit: 100 },
       { archived: true, modelProviders: [], limit: 100, cursor: "next" },

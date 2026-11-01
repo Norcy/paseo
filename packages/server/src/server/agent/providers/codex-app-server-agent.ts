@@ -7551,12 +7551,18 @@ export class CodexAppServerAgentClient implements AgentClient {
     }
   }
 
-  async listArchivedSessionIds(): Promise<string[]> {
+  async listArchivedSessionIds(signal: AbortSignal): Promise<string[]> {
+    signal.throwIfAborted();
     const child = await this.spawnAppServer();
     const client =
       this.deps._createCodexClient?.(child, this.logger, () => ({})) ??
       new CodexAppServerClient(child, this.logger);
+    let disposePromise: Promise<void> | undefined;
+    const dispose = () => (disposePromise ??= client.dispose());
+    const handleAbort = () => void dispose().catch(() => undefined);
+    signal.addEventListener("abort", handleAbort, { once: true });
     try {
+      signal.throwIfAborted();
       await client.request("initialize", buildCodexAppServerInitializeParams());
       client.notify("initialized", {});
       const ids = new Set<string>();
@@ -7578,9 +7584,11 @@ export class CodexAppServerAgentClient implements AgentClient {
         if (cursor && cursors.has(cursor)) throw new Error("Codex archive cursor repeated");
         if (cursor) cursors.add(cursor);
       } while (cursor);
+      signal.throwIfAborted();
       return [...ids];
     } finally {
-      await client.dispose();
+      signal.removeEventListener("abort", handleAbort);
+      await dispose();
     }
   }
 
