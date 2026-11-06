@@ -97,12 +97,15 @@ export interface Agent {
   attentionReason?: "finished" | "error" | "permission" | null;
   attentionTimestamp?: Date | null;
   archivedAt?: Date | null;
+  /** Background agents stay out of tabs, the subagent track and agent lists. Open them by id. */
+  background?: boolean;
   parentAgentId: string | null;
   labels: Record<string, string>;
   projectPlacement?: ProjectPlacementPayload | null;
 }
 
 export interface WorkspaceDescriptor {
+  parentWorkspaceId?: string;
   createdAt: Date | null;
   lastUserMessageAt: Date | null;
   id: string;
@@ -160,6 +163,7 @@ export function normalizeWorkspaceDescriptor(
     projectKind: payload.projectKind,
     workspaceKind: payload.workspaceKind,
     background: payload.background ?? false,
+    parentWorkspaceId: payload.parentWorkspaceId,
     name: payload.name,
     title: payload.title ?? null,
     pinnedAt: payload.pinnedAt ?? null,
@@ -260,6 +264,7 @@ interface ExplorerRequestState {
 }
 
 export interface AgentFileExplorerState {
+  listingGeneration: number;
   directories: Map<string, ExplorerDirectory>;
   isLoading: boolean;
   lastError: string | null;

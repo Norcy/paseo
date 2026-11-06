@@ -1,11 +1,18 @@
 import { Platform } from "react-native";
-import { type ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { CompactHeader } from "@/components/headers/compact-header";
 import {
   EXPLORER_TOGGLE_KEYS,
   WorkspaceExplorerToggle,
 } from "@/screens/workspace/workspace-explorer-toggle";
+import {
+  useWindowLayout,
+  resolveWorkspaceActionPlacement,
+  resolveWorkspaceBarActions,
+  WindowLayoutActions,
+} from "@/window-layout";
+import { IconButtonChromeProvider } from "@/components/ui/icon-button-chrome";
 
 export { MobileWorkspaceTabSwitcher } from "./tab-switcher";
 
@@ -15,8 +22,11 @@ interface CompactWorkspaceHeaderProps {
   onToggleExplorer: () => void;
   explorerToggleLabel: string;
   explorerToggleAccessibilityState: { expanded: boolean };
-  /** Tab switcher and conversation menu, after the explorer toggle. */
+  tabSwitcher: ReactNode;
+  /** Workspace overflow menu. */
   children: ReactNode;
+  headerVariant: "compact" | "full";
+  actionsActive: boolean;
 }
 
 /** The compact conversation title and controls. */
@@ -27,31 +37,43 @@ export function CompactWorkspaceHeader({
   explorerToggleLabel,
   explorerToggleAccessibilityState,
   children,
+  tabSwitcher,
+  headerVariant,
+  actionsActive,
 }: CompactWorkspaceHeaderProps) {
   const { t } = useTranslation();
-  const actions = (
-    <>
-      {Platform.OS !== "android" && (
-        <WorkspaceExplorerToggle
-          onPress={onToggleExplorer}
-          label={explorerToggleLabel}
-          tooltipLabel={t("workspace.tabs.explorerSidebar.toggle")}
-          tooltipKeys={EXPLORER_TOGGLE_KEYS}
-          accessibilityState={explorerToggleAccessibilityState}
-          mobile
-        />
-      )}
-      {children}
-    </>
-  );
+  const actionsInBar = resolveWorkspaceActionPlacement(useWindowLayout()) === "vertical-bar";
+  const isAndroid = Platform.OS === "android";
+  const symbols = {
+    "tab-count": headerVariant === "compact" || isAndroid ? null : tabSwitcher,
+    overflow: children,
+    explorer: !isAndroid ? (
+      <WorkspaceExplorerToggle
+        onPress={onToggleExplorer}
+        label={explorerToggleLabel}
+        tooltipLabel={t("workspace.tabs.explorerSidebar.toggle")}
+        tooltipKeys={EXPLORER_TOGGLE_KEYS}
+        accessibilityState={explorerToggleAccessibilityState}
+        mobile
+      />
+    ) : null,
+  };
+  const actions = resolveWorkspaceBarActions(headerVariant).map((symbol) => (
+    <Fragment key={symbol}>{symbols[symbol]}</Fragment>
+  ));
 
   return (
-    <CompactHeader
-      navigation="menu"
-      title={title}
-      titleTestID="workspace-header-title"
-      loading={isLoading}
-      actions={actions}
-    />
+    <IconButtonChromeProvider value="header-island">
+      {headerVariant === "compact" ? (
+        <CompactHeader
+          navigation="menu"
+          title={title}
+          titleTestID="workspace-header-title"
+          loading={isLoading}
+          actions={actionsInBar ? undefined : actions}
+        />
+      ) : null}
+      <WindowLayoutActions active={actionsActive}>{actions}</WindowLayoutActions>
+    </IconButtonChromeProvider>
   );
 }
