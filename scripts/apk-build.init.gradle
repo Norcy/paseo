@@ -12,6 +12,12 @@ allprojects { project ->
     repositories.all(redirectCentral)
     buildscript.repositories.all(redirectCentral)
     afterEvaluate {
+        def android = project.extensions.findByName('android')
+        if (android != null) {
+            def architectures = project.findProperty('reactNativeArchitectures').toString().split(',').toList()
+            android.defaultConfig.ndk.abiFilters.clear()
+            android.defaultConfig.ndk.abiFilters.addAll(architectures)
+        }
         if (project.path == ':app') {
             project.extensions.getByName('react').cliFile.set(
                 new File(project.rootDir, '../../../scripts/apk-expo-cli.cjs'))
