@@ -1171,6 +1171,7 @@ export class AgentManager {
         try {
           const sessions = await withTimeout(
             client.listImportableSessions!({
+              all: options?.all,
               limit: options?.limit,
               query: options?.query,
               scanLimit: options?.scanLimit,

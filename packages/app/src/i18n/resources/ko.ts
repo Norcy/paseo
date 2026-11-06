@@ -403,6 +403,7 @@ export const ko: TranslationResources = {
     },
   },
   importSession: {
+    bulk: en.importSession.bulk,
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "세션 가져오기",
     searchPlaceholder: "세션 검색...",

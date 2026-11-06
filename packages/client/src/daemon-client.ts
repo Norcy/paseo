@@ -1,3 +1,4 @@
+import type { CodexImportJob } from "@getpaseo/protocol/messages";
 import {
   HOST_ROUTE_OPCODE,
   encodeHostRouteFrame,
@@ -2767,6 +2768,32 @@ export class DaemonClient {
         }
         return msg.payload;
       },
+    });
+  }
+
+  async startCodexImport(): Promise<CodexImportJob> {
+    const requestId = this.createRequestId();
+    return this.sendRequest({
+      requestId,
+      message: { type: "agent.codex.import_all.request", requestId },
+      options: { skipQueue: true },
+      select: (msg) =>
+        msg.type === "agent.codex.import_all.response" && msg.payload.requestId === requestId
+          ? msg.payload.job
+          : null,
+    });
+  }
+
+  async getCodexImport(): Promise<{ job: CodexImportJob | null }> {
+    const requestId = this.createRequestId();
+    return this.sendRequest({
+      requestId,
+      message: { type: "agent.codex.get_import.request", requestId },
+      options: { skipQueue: true },
+      select: (msg) =>
+        msg.type === "agent.codex.get_import.response" && msg.payload.requestId === requestId
+          ? msg.payload
+          : null,
     });
   }
 

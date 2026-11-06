@@ -402,6 +402,17 @@ export const zhCN: TranslationResources = {
     },
   },
   importSession: {
+    bulk: {
+      title: "一键导入 Codex 对话",
+      description: "导入此主机上未归档的 Codex 对话。已导入的自动跳过，没有的项目自动添加。",
+      scanning: "正在查找对话…",
+      progress: "正在导入 {{done}} / {{total}}",
+      result: "已导入 {{imported}} · 已跳过 {{skipped}} · 失败 {{failed}}",
+      completed: "导入完成",
+      background: "关闭面板后，主机仍会继续导入。",
+      interrupted: "导入任务已结束或主机已重启，请重试以导入剩余对话。",
+      retry: "重试剩余对话",
+    },
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "导入会话",
     searchPlaceholder: "搜索会话...",

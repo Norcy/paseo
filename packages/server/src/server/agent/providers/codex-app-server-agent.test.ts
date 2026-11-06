@@ -7204,6 +7204,23 @@ describe("Codex importable sessions", () => {
     appServer.assertNoErrors();
   });
 
+  test("bulk import traverses beyond the picker scan limit and requests main session sources", async () => {
+    const threads = threadsUsedInReverseCreationOrder(650);
+    const handler = cappedThreadListHandler(threads);
+    const appServer = createFakeCodexAppServer({
+      "thread/list": (params) => {
+        expect(params).toMatchObject({ sourceKinds: ["cli", "vscode", "appServer", "unknown"] });
+        return handler(params);
+      },
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+    const sessions = await provider.listImportableSessions({ all: true });
+    expect(sessions.map((session) => session.providerHandleId)).toEqual(
+      threads.map((thread) => thread.id),
+    );
+    appServer.assertNoErrors();
+  });
+
   test("keeps the scanned window on the most recently used threads", async () => {
     const threads = threadsUsedInReverseCreationOrder(550);
     const appServer = createFakeCodexAppServer({
@@ -7405,7 +7422,12 @@ describe("Codex importable sessions", () => {
       },
       {
         method: "thread/list",
-        params: { limit: 50, sortKey: "updated_at", cwd: "/workspace/project-a" },
+        params: {
+          limit: 50,
+          sortKey: "updated_at",
+          cwd: "/workspace/project-a",
+          sourceKinds: ["cli", "vscode", "appServer", "unknown"],
+        },
       },
     ]);
   });

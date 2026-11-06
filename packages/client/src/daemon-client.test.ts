@@ -8471,3 +8471,47 @@ test("closes before admission when a protected-capable daemon is reached in lega
   expect(daemonReceived).toHaveLength(1);
   expect(JSON.parse(daemonReceived[0] as string)).toMatchObject({ type: "hello" });
 });
+
+test("starts a host Codex import and reads its status including an absent job", async () => {
+  const mock = createMockTransport();
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger: createMockLogger(),
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+  const connection = client.connect();
+  mock.triggerOpen();
+  await connection;
+  const job = {
+    status: "running" as const,
+    total: 0,
+    imported: 0,
+    skipped: 0,
+    currentTitle: null,
+    failures: [],
+    error: null,
+  };
+  const started = client.startCodexImport();
+  const startRequest = JSON.parse(String(mock.sent[0])).message;
+  expect(startRequest.type).toBe("agent.codex.import_all.request");
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.codex.import_all.response",
+      payload: { requestId: startRequest.requestId, job },
+    }),
+  );
+  expect(await started).toEqual(job);
+  const status = client.getCodexImport();
+  const statusRequest = JSON.parse(String(mock.sent[1])).message;
+  expect(statusRequest.type).toBe("agent.codex.get_import.request");
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "agent.codex.get_import.response",
+      payload: { requestId: statusRequest.requestId, job: null },
+    }),
+  );
+  expect(await status).toMatchObject({ job: null });
+});

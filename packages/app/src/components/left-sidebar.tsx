@@ -1,7 +1,10 @@
+import { CodexImportSheet } from "@/components/codex-import-sheet";
+import { useHostChooser } from "@/hosts/host-chooser";
 import { router } from "expo-router";
 import {
   CircleGauge,
   FolderPlus,
+  Import,
   GitBranch,
   Server,
   Settings,
@@ -435,6 +438,13 @@ function SidebarFooter({
   handleOpenHostSettings: (serverId: string) => void;
   onBeforeNavigate?: () => void;
 }) {
+  const { t } = useTranslation();
+  const chooseHost = useHostChooser();
+  const [importHost, setImportHost] = useState<string | null>(null);
+  const closeCodexImport = useCallback(() => setImportHost(null), []);
+  const openCodexImport = useCallback(() => {
+    chooseHost({ title: t("importSession.chooseHostTitle"), onChooseHost: setImportHost });
+  }, [chooseHost, t]);
   const newAgentKeys = useShortcutKeys("new-agent");
   const settingsKeys = useShortcutKeys("toggle-settings");
 
@@ -458,6 +468,12 @@ function SidebarFooter({
             onOpenHostSettings={handleOpenHostSettings}
           />
           <View style={styles.footerSpacer} />
+          <FooterIconButton
+            onPress={openCodexImport}
+            testID="sidebar-import-codex"
+            label={t("importSession.bulk.title")}
+            icon={Import}
+          />
           <SidebarHelpMenu />
           <FooterIconButton
             onPress={handleSettings}
@@ -468,6 +484,7 @@ function SidebarFooter({
           />
         </View>
       </View>
+      {importHost ? <CodexImportSheet serverId={importHost} onClose={closeCodexImport} /> : null}
     </UsageSidebarRoot>
   );
 }

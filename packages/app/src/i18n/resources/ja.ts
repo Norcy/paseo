@@ -407,6 +407,7 @@ export const ja: TranslationResources = {
     },
   },
   importSession: {
+    bulk: en.importSession.bulk,
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "セッションをインポート",
     searchPlaceholder: "セッションを検索...",

@@ -399,6 +399,18 @@ export const en = {
     },
   },
   importSession: {
+    bulk: {
+      title: "Import Codex chats",
+      description:
+        "Import unarchived Codex chats from this host. Existing chats are skipped; missing projects are added automatically.",
+      scanning: "Finding chats…",
+      progress: "Importing {{done}} / {{total}}",
+      result: "Imported {{imported}} · Skipped {{skipped}} · Failed {{failed}}",
+      completed: "Import finished",
+      background: "You can close this panel. Import continues on the host.",
+      interrupted: "The import task is no longer available. Retry to import remaining chats.",
+      retry: "Retry remaining chats",
+    },
     title: "Import session",
     chooseHostTitle: "Import from host",
     searchPlaceholder: "Search sessions...",

@@ -1001,7 +1001,8 @@ async function readCodexThreadWindow(
   while (threads.size < window.limit) {
     const response = toObjectRecord(
       await client.request("thread/list", {
-        limit: window.limit - threads.size,
+        limit: Math.min(100, window.limit - threads.size),
+        sourceKinds: ["cli", "vscode", "appServer", "unknown"],
         // Rank the window by last use. Codex pages by creation time by default,
         // which drops an old conversation that is still being worked in.
         // Older Codex builds ignore the unknown key and keep that order.
@@ -7419,8 +7420,8 @@ export class CodexAppServerAgentClient implements AgentClient {
       await client.request("initialize", buildCodexAppServerInitializeParams());
       client.notify("initialized", {});
 
-      const limit = options?.limit ?? 20;
-      const scanLimit = Math.min(options?.scanLimit ?? limit, 500);
+      const limit = options?.all ? Number.MAX_SAFE_INTEGER : (options?.limit ?? 20);
+      const scanLimit = options?.all ? limit : Math.min(options?.scanLimit ?? limit, 500);
       // thread/list returns the cheap `cwd` field. Fetch a wider window when
       // filtering since most threads will be from other cwds, then keep the
       // local realpath-aware filter for symlink-equivalent workspace paths.

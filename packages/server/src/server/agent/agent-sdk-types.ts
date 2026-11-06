@@ -538,6 +538,8 @@ export interface AgentSlashCommand {
 }
 
 export interface ListImportableSessionsOptions {
+  /** Codex bulk import traverses every page instead of a bounded picker window. */
+  all?: boolean;
   providerOptions?: ProviderOptions;
   limit?: number;
   /** Optional case-insensitive descriptor search text. */

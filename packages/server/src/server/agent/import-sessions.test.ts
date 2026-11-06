@@ -1,3 +1,4 @@
+import { CodexSessionImport } from "./codex-import.js";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -910,4 +911,67 @@ test("importProviderSession requires cwd from the selected provider row", async 
   await expect(harness.import({ providerHandleId: "thread-imported" })).rejects.toThrow(
     "Import requires cwd from the selected provider session",
   );
+});
+
+test("bulk Codex import skips existing sessions, continues after failure, and retries remaining sessions", async () => {
+  const importer = new CodexSessionImport();
+  const sessions = ["existing", "first", "broken", "last"].map((id) => ({
+    providerHandleId: id,
+    cwd: "/tmp/project",
+    title: id,
+    firstPromptPreview: null,
+  }));
+  const imported = new Set(["existing"]);
+  let fail = true;
+  const visited: string[] = [];
+  const deps = {
+    list: async () => [...sessions, sessions[1]!],
+    isImported: async (id: string) => imported.has(id),
+    import: async (session: { providerHandleId: string }) => {
+      visited.push(session.providerHandleId);
+      if (session.providerHandleId === "broken" && fail) throw new Error("Missing directory");
+      imported.add(session.providerHandleId);
+    },
+  };
+  expect(importer.start(deps).status).toBe("running");
+  await vi.waitFor(() => expect(importer.get()?.status).toBe("completed"));
+  expect(importer.get()).toEqual({
+    status: "completed",
+    total: 4,
+    imported: 2,
+    skipped: 1,
+    currentTitle: null,
+    failures: [{ sessionId: "broken", title: "broken", error: "Missing directory" }],
+    error: null,
+  });
+  fail = false;
+  importer.start(deps);
+  await vi.waitFor(() => expect(importer.get()?.status).toBe("completed"));
+  expect(importer.get()).toEqual({
+    status: "completed",
+    total: 4,
+    imported: 1,
+    skipped: 3,
+    currentTitle: null,
+    failures: [],
+    error: null,
+  });
+  expect(visited).toEqual(["first", "broken", "last", "broken"]);
+});
+
+test("repeated starts share one running host import and listing errors stay visible", async () => {
+  const importer = new CodexSessionImport();
+  let rejectListing!: (error: Error) => void;
+  const list = vi.fn(
+    () =>
+      new Promise<never>((_, reject) => {
+        rejectListing = reject;
+      }),
+  );
+  const deps = { list, isImported: async () => false, import: async () => {} };
+  expect(importer.start(deps)).toEqual(importer.start(deps));
+  expect(list).toHaveBeenCalledTimes(1);
+  rejectListing(new Error("Codex unavailable"));
+  await vi.waitFor(() => expect(importer.get()?.status).toBe("completed"));
+  expect(importer.get()?.error).toBe("Codex unavailable");
 });

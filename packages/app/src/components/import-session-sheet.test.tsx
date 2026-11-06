@@ -10,6 +10,7 @@ import type {
 } from "@getpaseo/client/internal/daemon-client";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CodexImportSheet } from "@/components/codex-import-sheet";
 import { ImportSessionSheet } from "@/components/import-session-sheet";
 
 const { theme } = vi.hoisted(() => ({
@@ -203,7 +204,21 @@ vi.mock("@/runtime/host-features", () => ({
     mockHostFeatures.current[feature] === true,
 }));
 
+const bulkRuntime = vi.hoisted(() => ({
+  client: { startCodexImport: vi.fn(), getCodexImport: vi.fn() },
+  connected: true,
+}));
+vi.mock("@/components/ui/alert", () => ({
+  Alert: ({ title, description }: { title?: string; description?: ReactNode }) => (
+    <div role="status">
+      {title}
+      {description}
+    </div>
+  ),
+}));
 vi.mock("@/runtime/host-runtime", () => ({
+  useHostRuntimeClient: () => bulkRuntime.client,
+  useHostRuntimeIsConnected: () => bulkRuntime.connected,
   useHosts: () => [{ serverId: "server-1", label: "workbench" }],
 }));
 
@@ -1309,5 +1324,63 @@ describe("ImportSessionSheet", () => {
     await waitFor(() => {
       expect(fetchRecentProviderSessions).toHaveBeenCalledTimes(2);
     });
+  });
+});
+
+describe("one-click Codex import", () => {
+  const completed = {
+    status: "completed",
+    total: 3,
+    imported: 2,
+    skipped: 1,
+    currentTitle: null,
+    failures: [],
+    error: null,
+  };
+
+  it("starts on open and shows the imported and skipped counts", async () => {
+    mockHostFeatures.current.codexBulkImport = true;
+    bulkRuntime.connected = true;
+    bulkRuntime.client.startCodexImport.mockResolvedValue(completed);
+    render(<CodexImportSheet serverId="server-1" onClose={vi.fn()} />);
+    await screen.findByText("Import finished");
+    expect(screen.getByText("Imported 2 · Skipped 1 · Failed 0")).not.toBeNull();
+  });
+
+  it("polls a running host task until completion", async () => {
+    mockHostFeatures.current.codexBulkImport = true;
+    bulkRuntime.connected = true;
+    bulkRuntime.client.startCodexImport.mockResolvedValue({
+      ...completed,
+      status: "running",
+      total: 3,
+      imported: 0,
+      skipped: 0,
+    });
+    bulkRuntime.client.getCodexImport.mockResolvedValue({ job: completed });
+    render(<CodexImportSheet serverId="server-1" onClose={vi.fn()} />);
+    await screen.findByText("Importing 0 / 3");
+    await screen.findByText("Import finished", {}, { timeout: 3000 });
+  });
+
+  it("keeps failures visible and lets the user retry remaining chats", async () => {
+    mockHostFeatures.current.codexBulkImport = true;
+    bulkRuntime.connected = true;
+    bulkRuntime.client.startCodexImport
+      .mockRejectedValueOnce(new Error("Codex unavailable"))
+      .mockResolvedValue(completed);
+    render(<CodexImportSheet serverId="server-1" onClose={vi.fn()} />);
+    await screen.findByText("Codex unavailable");
+    fireEvent.click(screen.getByRole("button", { name: "Retry remaining chats" }));
+    await screen.findByText("Import finished");
+  });
+
+  it("requires a host update before starting a bulk import", async () => {
+    mockHostFeatures.current.codexBulkImport = false;
+    bulkRuntime.connected = true;
+    bulkRuntime.client.startCodexImport.mockClear();
+    render(<CodexImportSheet serverId="server-1" onClose={vi.fn()} />);
+    await screen.findByText("Update the host to import sessions.");
+    expect(bulkRuntime.client.startCodexImport).not.toHaveBeenCalled();
   });
 });

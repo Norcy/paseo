@@ -1398,6 +1398,26 @@ export const FetchRecentProviderSessionsRequestMessageSchema = z.object({
   query: z.string().optional(),
 });
 
+export const CodexImportJobSchema = z.object({
+  status: z.enum(["running", "completed"]),
+  total: z.number().int().nonnegative(),
+  imported: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  currentTitle: z.string().nullable(),
+  failures: z.array(z.object({ sessionId: z.string(), title: z.string(), error: z.string() })),
+  error: z.string().nullable(),
+});
+export type CodexImportJob = z.infer<typeof CodexImportJobSchema>;
+
+export const CodexImportStartRequestSchema = z.object({
+  type: z.literal("agent.codex.import_all.request"),
+  requestId: z.string(),
+});
+export const CodexImportStatusRequestSchema = z.object({
+  type: z.literal("agent.codex.get_import.request"),
+  requestId: z.string(),
+});
+
 export const FetchAgentRequestMessageSchema = z.object({
   type: z.literal("fetch_agent_request"),
   requestId: z.string(),
@@ -3289,6 +3309,8 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   FetchAgentsRequestMessageSchema,
   FetchAgentHistoryRequestMessageSchema,
   FetchRecentProviderSessionsRequestMessageSchema,
+  CodexImportStartRequestSchema,
+  CodexImportStatusRequestSchema,
   FetchWorkspacesRequestMessageSchema,
   ProjectListRequestMessageSchema,
   FetchAgentRequestMessageSchema,
@@ -3818,6 +3840,7 @@ export const ServerInfoStatusPayloadSchema = z
         importSessionWorkspaceTarget: z.boolean().optional(),
         // COMPAT(importSessionSearch): added in v0.8.0, remove gate after 2027-03-02.
         importSessionSearch: z.boolean().optional(),
+        codexBulkImport: z.boolean().optional(),
         // COMPAT(forgeProviders): added in v0.2.0-beta.1. Drop the gate after
         // 2027-01-17 once the supported daemon floor is >= v0.2.0.
         // Daemon advertises pluggable non-GitHub forge support (the forge registry);
@@ -4322,6 +4345,15 @@ export const FetchRecentProviderSessionsResponseMessageSchema = z.object({
       )
       .optional(),
   }),
+});
+
+export const CodexImportStartResponseSchema = z.object({
+  type: z.literal("agent.codex.import_all.response"),
+  payload: z.object({ requestId: z.string(), job: CodexImportJobSchema }),
+});
+export const CodexImportStatusResponseSchema = z.object({
+  type: z.literal("agent.codex.get_import.response"),
+  payload: z.object({ requestId: z.string(), job: CodexImportJobSchema.nullable() }),
 });
 
 // COMPAT(workspaceProjects): added in v0.1.97, drop the optional gate when floor >= v0.1.97.
@@ -7066,6 +7098,8 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   FetchAgentsResponseMessageSchema,
   FetchAgentHistoryResponseMessageSchema,
   FetchRecentProviderSessionsResponseMessageSchema,
+  CodexImportStartResponseSchema,
+  CodexImportStatusResponseSchema,
   FetchWorkspacesResponseMessageSchema,
   ProjectAddResponseSchema,
   ProjectCreateDirectoryResponseSchema,

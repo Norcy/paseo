@@ -406,6 +406,7 @@ export const ru: TranslationResources = {
     },
   },
   importSession: {
+    bulk: en.importSession.bulk,
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Импортировать сессию",
     searchPlaceholder: "Поиск сессий...",
