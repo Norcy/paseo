@@ -137,14 +137,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
-function isArchivedCodexThreadResumeError(error: unknown, threadId: string): boolean {
-  if (!(error instanceof Error)) return false;
-  const expectedMessage =
-    `session ${threadId} is archived. ` +
-    `Run \`codex unarchive ${threadId}\` to unarchive it first.`;
-  return error.message === expectedMessage;
-}
-
 function isCodexAlreadyUnarchivedError(error: unknown, threadId: string): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(`no archived rollout found for thread id ${threadId}`);
@@ -4158,19 +4150,6 @@ export class CodexAppServerAgentSession implements AgentSession {
     } catch (error) {
       const threadId = this.currentThreadId;
       const message = error instanceof Error ? error.message : String(error);
-      if (isArchivedCodexThreadResumeError(error, threadId)) {
-        try {
-          await this.client.request("thread/unarchive", { threadId });
-        } catch (unarchiveError) {
-          if (!isCodexAlreadyUnarchivedError(unarchiveError, threadId)) {
-            throw unarchiveError;
-          }
-        }
-        const response = await this.client.request("thread/resume", params);
-        this.rememberResolvedSandboxPolicy(response);
-        this.logger.info({ threadId }, "Unarchived Codex thread to restore active Paseo agent");
-        return;
-      }
       this.logger.warn({ error, threadId }, "Failed to resume persisted Codex thread");
       throw new Error(`Failed to resume Codex thread ${threadId}: ${message}`, { cause: error });
     }

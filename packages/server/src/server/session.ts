@@ -5266,13 +5266,14 @@ export class Session {
 
     try {
       await Promise.all(
-        agentIds.map((id) =>
-          ensureAgentLoaded(id, {
+        agentIds.map(async (id) => {
+          await this.agentManager.refreshNativeArchives({ agentId: id });
+          await ensureAgentLoaded(id, {
             agentManager: this.agentManager,
             agentStorage: this.agentStorage,
             logger: this.sessionLogger,
-          }),
-        ),
+          });
+        }),
       );
       await Promise.all(agentIds.map((id) => this.agentManager.clearAgentAttention(id)));
       if (requestId) {
@@ -8279,6 +8280,7 @@ export class Session {
       : undefined;
 
     try {
+      await this.agentManager.refreshNativeArchives({ agentId: msg.agentId });
       const snapshot = await ensureAgentLoaded(msg.agentId, {
         agentManager: this.agentManager,
         agentStorage: this.agentStorage,

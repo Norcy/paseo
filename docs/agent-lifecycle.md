@@ -301,8 +301,11 @@ history session contains only the read results and must release its provider pro
 finishes. Codex reads the persisted thread and child histories on a temporary app-server and never
 loads, resumes, or unarchives a native thread, including legacy records whose native archive failed.
 ACP providers spawn the CLI, replay the session through `session/load`, and terminate the process
-before returning. Interactive resume remains responsible for repairing a provider session archived
-outside Paseo while its Paseo agent is active.
+before returning.
+
+Opening a conversation in Paseo checks native archive state before loading even an existing
+runtime. A confirmed native archive propagates to Paseo; interactive resume must not undo it.
+Only explicit Unarchive restores the native thread.
 
 Provider session connection owns every process it spawns until the session is registered with
 `AgentManager`. If initialization, persisted-session resume, or initial history hydration fails,

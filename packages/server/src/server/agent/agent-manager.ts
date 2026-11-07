@@ -1145,7 +1145,11 @@ export class AgentManager {
   private nativeArchiveRefresh?: Promise<void>;
   private nativeArchiveRefreshedAt = 0;
 
-  async refreshNativeArchives(): Promise<void> {
+  async refreshNativeArchives(options?: { agentId: string }): Promise<void> {
+    if (options) {
+      await this.refreshNativeArchivesNow(options.agentId);
+      return;
+    }
     if (this.nativeArchiveRefresh) return this.nativeArchiveRefresh;
     if (!this.registry || Date.now() - this.nativeArchiveRefreshedAt < 15_000) return;
     this.nativeArchiveRefresh = this.refreshNativeArchivesNow()
@@ -1158,8 +1162,15 @@ export class AgentManager {
     return this.nativeArchiveRefresh;
   }
 
-  private async refreshNativeArchivesNow(): Promise<void> {
-    const records = await this.requireRegistry().listActive();
+  private async refreshNativeArchivesNow(agentId?: string): Promise<void> {
+    const registry = this.requireRegistry();
+    let records: StoredAgentRecord[];
+    if (agentId) {
+      const record = await registry.get(agentId);
+      records = record && !record.archivedAt ? [record] : [];
+    } else {
+      records = await registry.listActive();
+    }
     await Promise.all(
       Array.from(this.clients, async ([provider, client]) => {
         const candidates = records.filter(
@@ -1184,11 +1195,12 @@ export class AgentManager {
             });
           }
         } catch (err) {
+          if (agentId) throw err;
           this.logger.warn({ err, provider }, "Failed to synchronize native archives");
         }
       }),
     );
-    this.nativeArchiveRefreshedAt = Date.now();
+    if (!agentId) this.nativeArchiveRefreshedAt = Date.now();
   }
 
   async listImportableSessions(

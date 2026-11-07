@@ -801,11 +801,21 @@ export function createViewedTimelineSync(ports: ViewedTimelineSyncPorts): Viewed
       publishVisibleMembership();
     },
     replaceVisibleAgentIds(sourceId, agentIds) {
+      const previouslyVisible = new Set(visibleAgentIds());
       const normalized = normalizeAgentIds(agentIds);
       if (normalized.length === 0) sources.delete(sourceId);
       else sources.set(sourceId, normalized);
       rememberOpenedAgentIds(normalized);
       publishVisibleMembership();
+      const reopenedAgentIds = visibleAgentIds().filter(
+        (agentId) =>
+          !previouslyVisible.has(agentId) && catchUps.get(agentId)?.status === "complete",
+      );
+      for (const agentId of reopenedAgentIds) {
+        visibilityCatchUpPending.add(agentId);
+        startCatchUp(agentId, { supersede: true });
+      }
+      if (reopenedAgentIds.length > 0) notifyListeners();
       startAcknowledgedCatchUps();
     },
     setActive(nextActive) {

@@ -2141,9 +2141,8 @@ describe("Codex app-server provider", () => {
     appServer.assertNoErrors();
   });
 
-  test("unarchives Codex when an active Paseo agent resumes an archived thread", async () => {
+  test("does not unarchive Codex when an active Paseo agent resumes an archived thread", async () => {
     const threadRequests: string[] = [];
-    let resumeAttempts = 0;
     const appServer = createFakeCodexAppServer({
       "thread/loaded/list": () => {
         threadRequests.push("thread/loaded/list");
@@ -2151,32 +2150,19 @@ describe("Codex app-server provider", () => {
       },
       "thread/resume": () => {
         threadRequests.push("thread/resume");
-        resumeAttempts += 1;
-        if (resumeAttempts === 1) {
-          return Promise.reject(new Error(archivedThreadErrorMessage("archived-thread-id")));
-        }
-        return { thread: { id: "archived-thread-id" } };
+        return Promise.reject(new Error(archivedThreadErrorMessage("archived-thread-id")));
       },
       "thread/unarchive": () => {
         threadRequests.push("thread/unarchive");
         return { thread: { id: "archived-thread-id" } };
       },
-      "thread/read": () => {
-        threadRequests.push("thread/read");
-        return { thread: { turns: [] } };
-      },
     });
     const provider = createProviderWithFakeAppServer(appServer);
 
-    const session = await provider.resumeSession(archivedThreadHandle());
-
-    expect(threadRequests).toEqual([
-      "thread/loaded/list",
-      "thread/resume",
-      "thread/unarchive",
-      "thread/resume",
-    ]);
-    await session.close();
+    await expect(provider.resumeSession(archivedThreadHandle())).rejects.toThrow(
+      archivedThreadErrorMessage("archived-thread-id"),
+    );
+    expect(threadRequests).toEqual(["thread/loaded/list", "thread/resume"]);
     appServer.assertNoErrors();
   });
 

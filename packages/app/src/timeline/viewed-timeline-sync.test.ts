@@ -694,8 +694,10 @@ test("open chats remain subscribed beyond five views and without mounted workspa
   world.sync.replaceVisibleAgentIds("workspace", []);
   world.expectNoPendingMembership();
   world.sync.replaceVisibleAgentIds("workspace", ["agent-a"]);
-  world.expectNoPendingFetch();
-  expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("ready");
+  expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("pending");
+  (await world.nextFetch("agent-a")).respond({ hasNewer: false });
+  await vi.waitFor(() => expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("ready"));
+  world.expectNoPendingMembership();
 
   world.sync.replaceOpenTabAgentIds(agents.slice(0, 5));
   const closed = await world.nextMembership();
@@ -1111,7 +1113,7 @@ test("membership retry cannot run while disconnected", async () => {
   expect(restored.agentIds).toEqual(["agent-a"]);
 });
 
-test("returning to an open hidden agent stays live after inactivity", async () => {
+test("returning to an open hidden agent verifies it without resubscribing", async () => {
   const world = new TimelineWorld();
   world.sync.setConnected(true);
   world.show("workspace", ["agent-a"]);
@@ -1130,6 +1132,9 @@ test("returning to an open hidden agent stays live after inactivity", async () =
   world.show("workspace", ["agent-a"]);
 
   world.expectNoPendingMembership();
+  expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("pending");
+  (await world.nextFetch("agent-a")).respond({ hasNewer: false });
+  await vi.waitFor(() => expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("ready"));
   world.expectNoPendingFetch();
 });
 
@@ -1197,4 +1202,21 @@ test("disposing a view releases its pending observation before bootstrap complet
   request.succeed();
   await Promise.resolve();
   world.expectNoPendingFetch();
+});
+
+test("returning to an open chat verifies it again while unchanged visibility does not", async () => {
+  const world = new TimelineWorld();
+  world.sync.setConnected(true);
+  world.sync.replaceVisibleAgentIds("workspace", ["agent-a"]);
+  (await world.nextMembership()).succeed();
+  (await world.nextFetch("agent-a")).respond({ hasNewer: false });
+  await vi.waitFor(() => expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("ready"));
+  world.sync.replaceVisibleAgentIds("workspace", []);
+  world.sync.replaceVisibleAgentIds("workspace", ["agent-a"]);
+  expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("pending");
+  (await world.nextFetch("agent-a")).respond({ hasNewer: false });
+  await vi.waitFor(() => expect(world.sync.getAgentTimelineStatus("agent-a")).toBe("ready"));
+  world.sync.replaceVisibleAgentIds("workspace", ["agent-a"]);
+  world.expectNoPendingFetch();
+  world.sync.dispose();
 });
