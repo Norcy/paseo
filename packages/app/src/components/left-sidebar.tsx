@@ -1,7 +1,7 @@
 import { CodexImportSheet } from "@/components/codex-import-sheet";
 import { useHostChooser } from "@/hosts/host-chooser";
+import { SidebarViewSlot } from "@/plugins/sidebar-view";
 import { useAddHost } from "@/hosts/add-host";
-import { router } from "expo-router";
 import {
   CircleGauge,
   FolderPlus,
@@ -42,7 +42,7 @@ import {
   resolveDesktopSidebarInsetLeft,
   resolveDesktopSidebarWidth,
 } from "@/components/desktop-sidebar-layout";
-import { useWindowLayout, resolveDesktopDivisionLayout } from "@/window-layout";
+import { useTopBand, useWindowLayout, resolveDesktopDivisionLayout } from "@/window-layout";
 import {
   SIDEBAR_RESIZE_ACTIVATION_OFFSET,
   SIDEBAR_RESIZE_FAIL_OFFSET,
@@ -50,6 +50,7 @@ import {
 import { HostPicker } from "@/components/hosts/host-picker";
 import { SidebarDisplayPreferencesMenu } from "@/components/sidebar/display-preferences/menu";
 import { SidebarSeparator } from "@/components/sidebar/sidebar-separator";
+import { SidebarToastRegion } from "@/components/sidebar/sidebar-toast-region";
 import { SidebarNavRows } from "@/components/sidebar/sidebar-nav-rows";
 import { SidebarFooterIconHighlight } from "@/components/sidebar/sidebar-footer-icon-highlight";
 import { SidebarHelpMenu } from "@/components/sidebar/sidebar-help-menu";
@@ -95,8 +96,9 @@ import { useOwnsWindowChromeCorner, WindowChromeSafeArea } from "@/utils/desktop
 import { useCloseAgentListGesture } from "@/mobile-panels/gestures";
 import { useLeftPanelWidth } from "@/mobile-panels/provider";
 import { MobilePanelOverlay } from "@/mobile-panels/presentation";
-import { buildSettingsRoute } from "@/utils/host-routes";
-import { openHostOverview } from "@/navigation/settings-navigation";
+import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
+import { openSettingsFromSidebar } from "@/navigation/settings-navigation";
 import { UsageSidebarItem, UsageSidebarRoot, useUsageSummary, useOpenSidebarUsage } from "@/usage";
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
@@ -168,6 +170,7 @@ export const LeftSidebar = memo(function LeftSidebar({
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const isCompactLayout = useIsCompactFormFactor();
+  const activeWorkspace = useActiveWorkspaceSelection();
   const showMobileAgent = usePanelStore((state) => state.showMobileAgent);
 
   const {
@@ -204,25 +207,26 @@ export const LeftSidebar = memo(function LeftSidebar({
   const openProjectPicker = useOpenAddProject();
   const { open: openImportSession, sheet: importSessionSheet } = useImportSession();
 
-  // Each destination closes the navigation overlay first. Closing is idempotent, so a docked
-  // sidebar runs the same handler.
+  // Workspace destinations close the overlay; Settings retains it for the return journey.
   const handleOpenProject = useCallback(() => {
     void openProjectPicker();
   }, [openProjectPicker]);
 
   const handleSettings = useCallback(() => {
-    showMobileAgent();
-    router.push(buildSettingsRoute());
-  }, [showMobileAgent]);
+    openSettingsFromSidebar({ workspace: activeWorkspace, isCompact: isCompactLayout });
+  }, [activeWorkspace, isCompactLayout]);
 
   const handleAddHost = useAddHost();
 
   const handleOpenHostSettings = useCallback(
     (serverId: string) => {
-      showMobileAgent();
-      openHostOverview(serverId);
+      openSettingsFromSidebar({
+        workspace: activeWorkspace,
+        isCompact: isCompactLayout,
+        route: buildSettingsHostSectionRoute(serverId, "host"),
+      });
     },
-    [showMobileAgent],
+    [activeWorkspace, isCompactLayout],
   );
 
   const labels = useMemo(
@@ -684,7 +688,9 @@ function MobileSidebar({
         )}
         <SidebarSeparator />
 
-        {sidebarBody}
+        <SidebarViewSlot dismiss={handleWorkspacePress}>
+          <SidebarToastRegion active={active}>{sidebarBody}</SidebarToastRegion>
+        </SidebarViewSlot>
 
         <SidebarFooter
           handleOpenProject={handleOpenProject}
@@ -819,9 +825,11 @@ function DesktopSidebar({
     ],
     [insetsTop, insets.bottom, insets.left, overlay, divisionLayout],
   );
+  // Below the window controls' row, or in the top band's place, the first row starts flush.
+  const inTopBand = useTopBand() !== null;
   const sidebarHeaderGroupStyle = useMemo(
-    () => [styles.sidebarHeaderGroup, ownsTopLeft && styles.sidebarHeaderGroupBelowChrome],
-    [ownsTopLeft],
+    () => [styles.sidebarHeaderGroup, (ownsTopLeft || inTopBand) && styles.sidebarHeaderGroupFlush],
+    [ownsTopLeft, inTopBand],
   );
   return (
     <MobilePanelOverlay
@@ -856,31 +864,35 @@ function DesktopSidebar({
             <SidebarNavRows style={sidebarHeaderGroupStyle} onBeforeNavigate={closeSidebar} />
           </View>
 
-          {isInitialLoad && !hasActiveHostFilter ? (
-            <SidebarAgentListSkeleton />
-          ) : (
-            <SidebarWorkspaceList
-              collapsedProjectKeys={collapsedProjectKeys}
-              onToggleProjectCollapsed={toggleProjectCollapsed}
-              shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
-              groupMode={groupMode}
-              workspaceGroups={workspaceGroups}
-              projectIconTargets={projectIconTargets}
-              pinnedGroups={pinnedGroups}
-              projects={projects}
-              hasProjectsBeforeFilter={hasProjectsBeforeFilter}
-              hasActiveProjectFilter={hasActiveProjectFilter}
-              workspaceEntriesByKey={workspaceEntriesByKey}
-              isRefreshing={isManualRefresh && isRevalidating}
-              onRefresh={handleRefresh}
-              onAddProject={handleOpenProject}
-              onImportSession={handleImportSession}
-              onWorkspacePress={closeSidebar}
-              parentGestureRef={closeGestureRef}
-              dragGestureHostActive={active}
-              listHeaderComponent={workspacesSectionHeaderElement}
-            />
-          )}
+          <SidebarViewSlot dismiss={closeSidebar}>
+            <SidebarToastRegion active={active}>
+              {isInitialLoad && !hasActiveHostFilter ? (
+                <SidebarAgentListSkeleton />
+              ) : (
+                <SidebarWorkspaceList
+                  collapsedProjectKeys={collapsedProjectKeys}
+                  onToggleProjectCollapsed={toggleProjectCollapsed}
+                  shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+                  groupMode={groupMode}
+                  workspaceGroups={workspaceGroups}
+                  projectIconTargets={projectIconTargets}
+                  pinnedGroups={pinnedGroups}
+                  projects={projects}
+                  hasProjectsBeforeFilter={hasProjectsBeforeFilter}
+                  hasActiveProjectFilter={hasActiveProjectFilter}
+                  workspaceEntriesByKey={workspaceEntriesByKey}
+                  isRefreshing={isManualRefresh && isRevalidating}
+                  onRefresh={handleRefresh}
+                  onAddProject={handleOpenProject}
+                  onImportSession={handleImportSession}
+                  onWorkspacePress={closeSidebar}
+                  parentGestureRef={closeGestureRef}
+                  dragGestureHostActive={active}
+                  listHeaderComponent={workspacesSectionHeaderElement}
+                />
+              )}
+            </SidebarToastRegion>
+          </SidebarViewSlot>
 
           <SidebarCalloutSlot />
 
@@ -946,7 +958,7 @@ const styles = StyleSheet.create((theme) => ({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  sidebarHeaderGroupBelowChrome: {
+  sidebarHeaderGroupFlush: {
     paddingTop: 0,
   },
   // The nav block caps at half the sidebar; a long item list scrolls inside the

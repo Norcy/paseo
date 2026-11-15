@@ -143,6 +143,90 @@ test("resuming a stored agent keeps its unread flag and its last-activity time",
   }
 });
 
+test("reopening an agent with no resumable session keeps a metadata write that overlaps it", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "agent-loading-handleless-metadata-"));
+  const logger = createTestLogger();
+  const storage = new AgentStorage(path.join(root, "agents"), logger);
+  const base = createTestAgentClients().codex!;
+  // A provider whose sessions leave nothing to resume (Codex before its first prompt).
+  const client: AgentClient = {
+    provider: base.provider,
+    capabilities: base.capabilities,
+    createSession: async (config, context) => {
+      const session = await base.createSession(config, context);
+      session.describePersistence = () => null;
+      const runtimeInfo = session.getRuntimeInfo.bind(session);
+      session.getRuntimeInfo = async () => {
+        const { sessionId: _sessionId, ...rest } = await runtimeInfo();
+        return rest;
+      };
+      return session;
+    },
+    resumeSession: (handle, overrides, context, options) =>
+      base.resumeSession(handle, overrides, context, options),
+    fetchCatalog: (options) => base.fetchCatalog(options),
+    isAvailable: () => base.isAvailable(),
+  };
+  let holdCreate: Promise<void> | null = null;
+  let createEntered!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    createEntered = resolve;
+  });
+  const manager = new AgentManager({
+    clients: { codex: client },
+    registry: storage,
+    logger,
+    pluginLifecycle: {
+      emit: () => {},
+      before: async (name, request) => {
+        if (name === "agent.create.before" && holdCreate) {
+          createEntered();
+          await holdCreate;
+        }
+        return request;
+      },
+    },
+  });
+  const agentId = "00000000-0000-4000-8000-000000000701";
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: root }, agentId, {
+      workspaceId: "workspace-a",
+      metadata: { first: 1 },
+    });
+    await manager.closeAgent(agentId);
+    await manager.flush();
+    await storage.flush();
+    expect((await storage.get(agentId))?.persistence ?? null).toBeNull();
+
+    // The reopen is held in its create hook while a plugin writes metadata to the same agent.
+    let release!: () => void;
+    holdCreate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const reopened = ensureAgentLoaded(agentId, {
+      agentManager: manager,
+      agentStorage: storage,
+      logger,
+    });
+    await entered;
+    const saved = manager.setMetadata(agentId, { second: 2 });
+    release();
+
+    expect(await saved).toEqual({ first: 1, second: 2 });
+    await reopened;
+    expect(manager.getAgent(agentId)?.metadata).toEqual({ first: 1, second: 2 });
+    await manager.flush();
+    await storage.flush();
+    expect((await storage.get(agentId))?.metadata).toEqual({ first: 1, second: 2 });
+  } finally {
+    await manager.closeAgent(agentId).catch(() => undefined);
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test.each([false, true])(
   "loads history after its working directory is removed (archived: %s)",
   async (archived) => {
@@ -454,6 +538,33 @@ test.each(["live", "closed"])(
     }
   },
 );
+
+test("a current timeline cursor does not hide a Codex archive", async () => {
+  const clients = createTestAgentClients();
+  const archivedIds: string[] = [];
+  clients.codex!.listArchivedSessionIds = async () => archivedIds;
+  const ctx = await createDaemonTestContext({ agentClients: clients });
+  const cwd = await mkdtemp(path.join(tmpdir(), "current-timeline-native-archive-"));
+  try {
+    const agent = await ctx.client.createAgent({ provider: "codex", cwd });
+    const { agentManager, agentStorage } = ctx.daemon.daemon;
+    const cursor = agentManager.getLoadedTimelineHead(agent.id)!;
+    const options = { cursors: { [agent.id]: cursor } };
+    const initial = ctx.client.observeTimeline([agent.id], options);
+    expect((await initial.ready)?.timelines?.[agent.id]).toBe("current");
+    await initial.release();
+
+    const stored = await agentStorage.get(agent.id);
+    archivedIds.push(stored!.persistence!.sessionId);
+    const reopened = ctx.client.observeTimeline([agent.id], options);
+    expect((await reopened.ready)?.timelines?.[agent.id]).toBe("behind");
+    expect((await agentStorage.get(agent.id))?.archivedAt).toEqual(expect.any(String));
+    await reopened.release();
+  } finally {
+    await ctx.cleanup();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
 
 test("an archive check failure blocks opening and retry checks again before resuming", async () => {
   const clients = createTestAgentClients();
