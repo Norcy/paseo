@@ -434,6 +434,7 @@ export const ar: TranslationResources = {
     },
   },
   importSession: {
+    bulk: en.importSession.bulk,
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "جلسة الاستيراد",
     searchPlaceholder: "البحث في الجلسات...",

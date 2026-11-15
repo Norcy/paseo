@@ -224,12 +224,6 @@ const DIFF_OPTIONS_WRAP_ICON = (
 const DIFF_OPTIONS_SPLIT_ICON = (
   <ThemedColumns2 size={14} uniProps={foregroundMutedIconColorMapping} />
 );
-const DIFF_OPTIONS_COLLAPSE_ICON = (
-  <ThemedListChevronsDownUp size={14} uniProps={foregroundMutedIconColorMapping} />
-);
-const DIFF_OPTIONS_EXPAND_ICON = (
-  <ThemedListChevronsUpDown size={14} uniProps={foregroundMutedIconColorMapping} />
-);
 const DIFF_OPTIONS_CHANGES_TAB_ICON = (
   <ThemedMaximize size={14} uniProps={foregroundMutedIconColorMapping} />
 );
@@ -820,8 +814,40 @@ function ChangesToolbarActions({ mode, compact }: { mode: ChangesToolbarMode; co
         />
       ) : null}
       {mode.refresh ? <ChangesRefreshButton refresh={mode.refresh} compact={compact} /> : null}
+      <ChangesCollapseAllButton collapse={mode.options.collapse} compact={compact} />
       <ChangesOptionsMenu mode={mode} compact={compact} />
     </>
+  );
+}
+
+function ChangesCollapseAllButton({
+  collapse,
+  compact,
+}: {
+  collapse: ChangesToolbarDiffOptions["collapse"];
+  compact: boolean;
+}) {
+  const { t } = useTranslation();
+  const iconSize = paneContentToolbarIconSize(compact);
+  const collapseLabel = t(
+    collapse?.allFilesCollapsed
+      ? "workspace.git.diff.expandAllFiles"
+      : "workspace.git.diff.collapseAllFiles",
+  );
+  if (!collapse) return null;
+  return (
+    <ToolbarButton
+      compact={compact}
+      label={collapseLabel}
+      testID="changes-toggle-collapse-all"
+      onPress={collapse.allFilesCollapsed ? collapse.onExpandAll : collapse.onCollapseAll}
+    >
+      {collapse.allFilesCollapsed ? (
+        <ThemedListChevronsUpDown size={iconSize} uniProps={extraMutedIconColorMapping} />
+      ) : (
+        <ThemedListChevronsDownUp size={iconSize} uniProps={extraMutedIconColorMapping} />
+      )}
+    </ToolbarButton>
   );
 }
 
@@ -834,11 +860,6 @@ function ChangesDiffToolbar({
 }) {
   const { t } = useTranslation();
   const iconSize = paneContentToolbarIconSize(compact);
-  const collapseLabel = t(
-    options.collapse?.allFilesCollapsed
-      ? "workspace.git.diff.expandAllFiles"
-      : "workspace.git.diff.collapseAllFiles",
-  );
   const whitespaceLabel = options.hideWhitespace
     ? t("workspace.git.diff.showWhitespace")
     : t("workspace.git.diff.hideWhitespace");
@@ -851,24 +872,7 @@ function ChangesDiffToolbar({
       : t("workspace.git.diff.switchToSplit");
   return (
     <>
-      {options.collapse ? (
-        <ToolbarButton
-          compact={compact}
-          label={collapseLabel}
-          testID="changes-toggle-collapse-all"
-          onPress={
-            options.collapse.allFilesCollapsed
-              ? options.collapse.onExpandAll
-              : options.collapse.onCollapseAll
-          }
-        >
-          {options.collapse.allFilesCollapsed ? (
-            <ThemedListChevronsUpDown size={iconSize} uniProps={extraMutedIconColorMapping} />
-          ) : (
-            <ThemedListChevronsDownUp size={iconSize} uniProps={extraMutedIconColorMapping} />
-          )}
-        </ToolbarButton>
-      ) : null}
+      <ChangesCollapseAllButton collapse={options.collapse} compact={compact} />
       {options.layout ? (
         <ToolbarButton
           compact={compact}
@@ -1018,11 +1022,6 @@ function ChangesInlineDiffOption({ toggle }: { toggle: ChangesToolbarInlineDiffT
 
 function ChangesDiffOptions({ options }: { options: ChangesToolbarDiffOptions }) {
   const { t } = useTranslation();
-  const collapseLabel = t(
-    options.collapse?.allFilesCollapsed
-      ? "workspace.git.diff.expandAllFiles"
-      : "workspace.git.diff.collapseAllFiles",
-  );
   const whitespaceLabel = options.hideWhitespace
     ? t("workspace.git.diff.showWhitespace")
     : t("workspace.git.diff.hideWhitespace");
@@ -1032,26 +1031,6 @@ function ChangesDiffOptions({ options }: { options: ChangesToolbarDiffOptions })
 
   return (
     <>
-      {options.collapse ? (
-        <>
-          <DropdownMenuItem
-            leading={
-              options.collapse.allFilesCollapsed
-                ? DIFF_OPTIONS_EXPAND_ICON
-                : DIFF_OPTIONS_COLLAPSE_ICON
-            }
-            testID="changes-toggle-collapse-all"
-            onSelect={
-              options.collapse.allFilesCollapsed
-                ? options.collapse.onExpandAll
-                : options.collapse.onCollapseAll
-            }
-          >
-            {collapseLabel}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-        </>
-      ) : null}
       {options.layout ? (
         <DropdownMenuItem
           leading={DIFF_OPTIONS_SPLIT_ICON}

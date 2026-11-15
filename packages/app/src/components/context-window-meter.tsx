@@ -18,7 +18,11 @@ import type { Theme } from "@/styles/theme";
 import { TOOLBAR_DISC_SIZE, type ToolbarRing } from "@/components/ui/control-geometry";
 import { ContextWindowDetails } from "./context-window-details";
 import { ContextWindowSheet } from "./context-window-sheet";
-import { formatContextPercentage } from "./context-window-meter.utils";
+import {
+  formatContextPercentage,
+  getUsagePercentage,
+  formatSessionCost,
+} from "./context-window-meter.utils";
 
 interface ContextWindowMeterProps {
   serverId: string;
@@ -38,33 +42,8 @@ const COMPACT_RADIUS = 5;
 const STROKE_WIDTH = 2;
 const COMPACT_STROKE_WIDTH = 1.75;
 
-function isValidMaxTokens(value: number): boolean {
-  return Number.isFinite(value) && value > 0;
-}
-
-function isValidUsedTokens(value: number): boolean {
-  return Number.isFinite(value) && value >= 0;
-}
-
-function getUsagePercentage(maxTokens: number, usedTokens: number): number | null {
-  if (!isValidMaxTokens(maxTokens) || !isValidUsedTokens(usedTokens)) {
-    return null;
-  }
-  return (usedTokens / maxTokens) * 100;
-}
-
 function clampPercentage(value: number): number {
   return Math.max(0, Math.min(100, value));
-}
-
-function formatSessionCost(value: number): string | null {
-  if (!Number.isFinite(value) || value <= 0) {
-    return null;
-  }
-  if (value < 0.01) {
-    return `$${value.toFixed(4)}`;
-  }
-  return `$${value.toFixed(2)}`;
 }
 
 function getProgressColor(percentage: number, theme: Theme): string {

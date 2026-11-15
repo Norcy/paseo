@@ -1,17 +1,30 @@
+import { CodexImportSheet } from "@/components/codex-import-sheet";
+import { useHostChooser } from "@/hosts/host-chooser";
 import { SidebarViewSlot } from "@/plugins/sidebar-view";
 import { useAddHost } from "@/hosts/add-host";
 import {
   CircleGauge,
   FolderPlus,
+  Import,
   GitBranch,
   Server,
   Settings,
   type LucideIcon,
 } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   Pressable,
+  Platform,
   ScrollView,
   StyleSheet as RNStyleSheet,
   Text,
@@ -25,7 +38,6 @@ import { scheduleOnRN } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import { TitlebarDragRegion } from "@/components/desktop/titlebar-drag-region";
-import { SidebarCloseButton } from "@/components/headers/sidebar-close-button";
 import {
   resolveDesktopSidebarInsetLeft,
   resolveDesktopSidebarWidth,
@@ -91,6 +103,7 @@ import { UsageSidebarItem, UsageSidebarRoot, useUsageSummary, useOpenSidebarUsag
 import { SidebarAgentListSkeleton } from "./sidebar-agent-list-skeleton";
 import { SidebarCalloutSlot } from "./sidebar-callout-slot";
 import { SidebarWorkspaceList } from "./sidebar-workspace-list";
+import { MobileConversationList } from "./mobile-conversation-list";
 
 type SidebarTheme = ReturnType<typeof useUnistyles>["theme"];
 
@@ -428,6 +441,13 @@ function SidebarFooter({
   handleOpenHostSettings: (serverId: string) => void;
   onBeforeNavigate?: () => void;
 }) {
+  const { t } = useTranslation();
+  const chooseHost = useHostChooser();
+  const [importHost, setImportHost] = useState<string | null>(null);
+  const closeCodexImport = useCallback(() => setImportHost(null), []);
+  const openCodexImport = useCallback(() => {
+    chooseHost({ title: t("importSession.chooseHostTitle"), onChooseHost: setImportHost });
+  }, [chooseHost, t]);
   const newAgentKeys = useShortcutKeys("new-agent");
   const settingsKeys = useShortcutKeys("toggle-settings");
   const isCompactLayout = useIsCompactFormFactor();
@@ -476,12 +496,21 @@ function SidebarFooter({
             />
           ) : null}
           <View style={styles.footerSpacer} />
+          {isInline("import-codex") ? (
+            <FooterIconButton
+              onPress={openCodexImport}
+              testID="sidebar-import-codex"
+              label={t("importSession.bulk.title")}
+              icon={Import}
+            />
+          ) : null}
           {isInline("help") ? <SidebarHelpMenu /> : null}
           {overflow.length > 0 ? (
             <SidebarFooterOverflowMenu
               actions={overflow}
               labels={labels}
               onAddProject={handleOpenProject}
+              onImportCodex={openCodexImport}
               onSettings={handleSettings}
               onAddHost={handleAddHost}
               onOpenHostSettings={handleOpenHostSettings}
@@ -498,6 +527,7 @@ function SidebarFooter({
           ) : null}
         </View>
       </View>
+      {importHost ? <CodexImportSheet serverId={importHost} onClose={closeCodexImport} /> : null}
     </UsageSidebarRoot>
   );
 }
@@ -576,27 +606,12 @@ function MobileSidebar({
   insetsBottom,
   closeSidebar,
 }: MobileSidebarProps) {
-  const insets = useSafeAreaInsets();
   const hasActiveHostFilter = useSidebarViewStore((state) => state.hostFilters.length > 0);
   const { gesture: closeGesture, gestureRef: closeGestureRef } = useCloseAgentListGesture();
 
   const handleWorkspacePress = useCallback(() => {
     closeSidebar();
   }, [closeSidebar]);
-
-  const closeButton = useMemo(
-    () => (
-      <SidebarCloseButton
-        label={labels.closeSidebar}
-        onPress={closeSidebar}
-        testID="sidebar-close"
-        nativeID="sidebar-close"
-        style={styles.mobileCloseButton(insets.right)}
-      />
-    ),
-    [labels.closeSidebar, closeSidebar, insets.right],
-  );
-
   const mobileSidebarInsetStyle = useMemo(
     () => ({
       paddingTop: insetsTop,
@@ -606,12 +621,39 @@ function MobileSidebar({
     [insetsTop, insetsBottom, theme.colors.surfaceSidebar],
   );
 
+  let sidebarBody: ReactNode;
+  if (Platform.OS === "android") {
+    sidebarBody = <MobileConversationList onSelect={handleWorkspacePress} />;
+  } else if (isInitialLoad && !hasActiveHostFilter) {
+    sidebarBody = <SidebarAgentListSkeleton />;
+  } else {
+    sidebarBody = (
+      <SidebarWorkspaceList
+        collapsedProjectKeys={collapsedProjectKeys}
+        onToggleProjectCollapsed={toggleProjectCollapsed}
+        shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
+        groupMode={groupMode}
+        workspaceGroups={workspaceGroups}
+        projectIconTargets={projectIconTargets}
+        pinnedGroups={pinnedGroups}
+        projects={projects}
+        hasProjectsBeforeFilter={hasProjectsBeforeFilter}
+        hasActiveProjectFilter={hasActiveProjectFilter}
+        workspaceEntriesByKey={workspaceEntriesByKey}
+        isRefreshing={isManualRefresh && isRevalidating}
+        onRefresh={handleRefresh}
+        onWorkspacePress={handleWorkspacePress}
+        onAddProject={handleOpenProject}
+        onImportSession={handleImportSession}
+        parentGestureRef={closeGestureRef}
+        dragGestureHostActive={active}
+        listHeaderComponent={workspacesSectionHeaderElement}
+      />
+    );
+  }
+
   const navRows = (
-    <SidebarNavRows
-      style={styles.mobileNavRowsGroup}
-      onBeforeNavigate={closeSidebar}
-      firstRowTrailing={closeButton}
-    />
+    <SidebarNavRows style={styles.mobileNavRowsGroup} onBeforeNavigate={closeSidebar} />
   );
 
   return (
@@ -647,33 +689,7 @@ function MobileSidebar({
         <SidebarSeparator />
 
         <SidebarViewSlot dismiss={handleWorkspacePress}>
-          <SidebarToastRegion active={active}>
-            {isInitialLoad && !hasActiveHostFilter ? (
-              <SidebarAgentListSkeleton />
-            ) : (
-              <SidebarWorkspaceList
-                collapsedProjectKeys={collapsedProjectKeys}
-                onToggleProjectCollapsed={toggleProjectCollapsed}
-                shortcutIndexByWorkspaceKey={shortcutIndexByWorkspaceKey}
-                groupMode={groupMode}
-                workspaceGroups={workspaceGroups}
-                projectIconTargets={projectIconTargets}
-                pinnedGroups={pinnedGroups}
-                projects={projects}
-                hasProjectsBeforeFilter={hasProjectsBeforeFilter}
-                hasActiveProjectFilter={hasActiveProjectFilter}
-                workspaceEntriesByKey={workspaceEntriesByKey}
-                isRefreshing={isManualRefresh && isRevalidating}
-                onRefresh={handleRefresh}
-                onWorkspacePress={handleWorkspacePress}
-                onAddProject={handleOpenProject}
-                onImportSession={handleImportSession}
-                parentGestureRef={closeGestureRef}
-                dragGestureHostActive={active}
-                listHeaderComponent={workspacesSectionHeaderElement}
-              />
-            )}
-          </SidebarToastRegion>
+          <SidebarToastRegion active={active}>{sidebarBody}</SidebarToastRegion>
         </SidebarViewSlot>
 
         <SidebarFooter
@@ -961,9 +977,6 @@ const styles = StyleSheet.create((theme) => ({
     flex: 1,
     minHeight: 0,
   },
-  mobileCloseButton: (rightInset: number) => ({
-    marginRight: theme.spacing[2] + rightInset,
-  }),
   desktopSidebarBorder: (hasDivision: boolean) => ({
     borderRightWidth: hasDivision ? 0 : 1,
     borderRightColor: theme.colors.border,

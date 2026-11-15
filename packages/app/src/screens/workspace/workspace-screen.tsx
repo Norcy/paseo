@@ -39,7 +39,7 @@ import {
 } from "react";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useIsFocused } from "expo-router/react-navigation";
-import { BackHandler, Text, View } from "react-native";
+import { BackHandler, Platform, Text, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, type Href } from "expo-router";
 import * as Clipboard from "expo-clipboard";
@@ -226,6 +226,7 @@ import {
   WorkspaceHeaderMenuDesktop,
   WorkspaceHeaderMenuMobile,
 } from "@/screens/workspace/workspace-header-menu";
+import { ConversationHeaderMenu } from "@/components/conversation-menu";
 import { PluginHeaderButtons } from "@/plugins";
 import {
   createWorkspaceFileTabTarget,
@@ -694,6 +695,31 @@ function getHostDisplayName(host: { label?: string | null } | null, fallback: st
   return trimmed ? trimmed : fallback;
 }
 
+function getAgentIdFromTabTarget(target: WorkspaceTabTarget | undefined): string | null {
+  return target?.kind === "agent" ? target.agentId : null;
+}
+
+function getActiveConversationAgentId(
+  tab: { descriptor: { target: WorkspaceTabTarget } } | null | undefined,
+): string | null {
+  return tab ? getAgentIdFromTabTarget(tab.descriptor.target) : null;
+}
+
+function resolveAgentTitle(
+  agents: Map<string, { title: string | null }> | undefined,
+  agentId: string | null,
+): string | null {
+  return agentId ? (agents?.get(agentId)?.title?.trim() ?? null) : null;
+}
+
+function useCompactConversationTitle(
+  serverId: string,
+  tab: { descriptor: { target: WorkspaceTabTarget } } | null | undefined,
+): string | null {
+  const agentId = getActiveConversationAgentId(tab);
+  return useSessionStore((state) => resolveAgentTitle(state.sessions[serverId]?.agents, agentId));
+}
+
 function useWorkspaceRouteActions(normalizedServerId: string): {
   handleRetryHost: () => void;
   handleManageHost: () => void;
@@ -1031,6 +1057,14 @@ function useLastMainPane(input: {
     lastMainPaneRef.current.paneId = focusedPaneId;
   }
   return lastMainPaneRef;
+}
+
+function resolveCompactConversationTitle(
+  platform: string,
+  conversationTitle: string | null,
+  workspaceTitle: string,
+): string {
+  return platform === "android" && conversationTitle ? conversationTitle : workspaceTitle;
 }
 
 /** The docked explorer beside the center column takes the top-right window-chrome corner. */
@@ -1606,6 +1640,7 @@ function WorkspaceScreenContent({
 
   const activeTabId = focusedPaneTabState.activeTabId;
   const activeTab = focusedPaneTabState.activeTab;
+  const activeConversationTitle = useCompactConversationTitle(normalizedServerId, activeTab);
 
   const tabs = useMemo<WorkspaceTabDescriptor[]>(
     () => focusedPaneTabState.tabs.map((tab) => tab.descriptor),
@@ -1932,13 +1967,6 @@ function WorkspaceScreenContent({
     workspaceLayout,
     openUrl: handleOpenUrlInBrowserTab,
   });
-
-  const handleSelectSwitcherTab = useCallback(
-    (key: string) => {
-      navigateToTabId(key);
-    },
-    [navigateToTabId],
-  );
 
   // The new pane opens empty and the user picks what goes in it from the launcher.
   // Seeding a draft here guessed for them, and guessed "new agent" every time.
@@ -3422,7 +3450,7 @@ function WorkspaceScreenContent({
           activeTabKey={headerActiveTabKey}
           normalizedServerId={normalizedServerId}
           normalizedWorkspaceId={normalizedWorkspaceId}
-          onSelectSwitcherTab={handleSelectSwitcherTab}
+          onSelectSwitcherTab={navigateToTabId}
           createTerminalDisabled={createTerminalDisabled}
           onCreateDraftTab={handleCreateDraftTab}
           onCreateTerminal={handleCreateTerminal}
@@ -3442,7 +3470,7 @@ function WorkspaceScreenContent({
     [
       normalizedServerId,
       normalizedWorkspaceId,
-      handleSelectSwitcherTab,
+      navigateToTabId,
       createTerminalDisabled,
       handleCreateDraftTab,
       handleCreateTerminal,
@@ -3466,37 +3494,49 @@ function WorkspaceScreenContent({
           actionsActive={isRouteFocused && (!isMobile || workspacePanelActive)}
           tabSwitcher={tabSwitcher}
           isLoading={isWorkspaceHeaderLoading}
-          title={workspaceHeaderTitle}
-          subtitle={workspaceHeaderSubtitle}
-          isSubtitleDistinct={isWorkspaceHeaderSubtitleDistinct}
-          serverId={normalizedServerId}
+          title={resolveCompactConversationTitle(
+            Platform.OS,
+            activeConversationTitle,
+            workspaceHeaderTitle,
+          )}
           onToggleExplorer={handleToggleExplorerSidebar}
           explorerToggleLabel={explorerSidebarToggleLabel}
           explorerToggleAccessibilityState={explorerSidebarToggleAccessibilityState}
         >
-          <WorkspaceHeaderMenuMobile
-            pane={paneTabs?.actions.pane}
-            onExitFocusMode={isFocusModeEnabled ? toggleFocusMode : undefined}
-            normalizedServerId={normalizedServerId}
-            normalizedWorkspaceId={normalizedWorkspaceId}
-            scripts={compactHeaderScripts}
-            currentBranchName={currentBranchName}
-            showWorkspaceSetup={showWorkspaceSetup}
-            showCreateBrowserTab={showCreateBrowserTab}
-            createTerminalDisabled={createTerminalDisabled}
-            importAgentDisabled={!canOpenImportSheet}
-            copyPathDisabled={!workspaceDirectory}
-            onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
-            onCreateBrowser={handleCreateBrowserTab}
-            onOpenImportSheet={openImportSheet}
-            onCopyWorkspacePath={handleCopyWorkspacePath}
-            onCopyBranchName={handleCopyBranchName}
-            onOpenSetupTab={handleOpenSetupTab}
-          />
+          {Platform.OS === "android" ? (
+            <ConversationHeaderMenu
+              serverId={normalizedServerId}
+              agentId={getActiveConversationAgentId(activeTab)}
+              onToggleExplorer={handleToggleExplorerSidebar}
+              explorerLabel={explorerSidebarToggleLabel}
+            />
+          ) : (
+            <WorkspaceHeaderMenuMobile
+              pane={paneTabs?.actions.pane}
+              onExitFocusMode={isFocusModeEnabled ? toggleFocusMode : undefined}
+              normalizedServerId={normalizedServerId}
+              normalizedWorkspaceId={normalizedWorkspaceId}
+              scripts={compactHeaderScripts}
+              currentBranchName={currentBranchName}
+              showWorkspaceSetup={showWorkspaceSetup}
+              showCreateBrowserTab={showCreateBrowserTab}
+              createTerminalDisabled={createTerminalDisabled}
+              importAgentDisabled={!canOpenImportSheet}
+              copyPathDisabled={!workspaceDirectory}
+              onCreateTerminalWithProfile={handleCreateTerminalWithProfile}
+              onCreateBrowser={handleCreateBrowserTab}
+              onOpenImportSheet={openImportSheet}
+              onCopyWorkspacePath={handleCopyWorkspacePath}
+              onCopyBranchName={handleCopyBranchName}
+              onOpenSetupTab={handleOpenSetupTab}
+            />
+          )}
         </CompactWorkspaceHeader>
       );
     },
     [
+      activeConversationTitle,
+      activeTab,
       renderWorkspaceTabSwitcher,
       isFocusModeEnabled,
       toggleFocusMode,
@@ -3515,14 +3555,12 @@ function WorkspaceScreenContent({
       isMobile,
       isRouteFocused,
       isWorkspaceHeaderLoading,
-      isWorkspaceHeaderSubtitleDistinct,
       normalizedServerId,
       normalizedWorkspaceId,
       openImportSheet,
       showCreateBrowserTab,
       showWorkspaceSetup,
       workspaceDirectory,
-      workspaceHeaderSubtitle,
       workspaceHeaderTitle,
       workspacePanelActive,
     ],

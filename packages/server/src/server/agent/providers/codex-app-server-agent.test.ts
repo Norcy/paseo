@@ -2215,9 +2215,45 @@ describe("Codex app-server provider", () => {
     appServer.assertNoErrors();
   });
 
-  test("unarchives Codex when an active Paseo agent resumes an archived thread", async () => {
+  test("cancels a stalled native archive scan and releases its process", async () => {
+    const appServer = createFakeCodexAppServer({
+      "thread/list": () => new Promise(() => {}),
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+    const kill = vi.spyOn(appServer.child, "kill");
+    const controller = new AbortController();
+    const scan = provider.listArchivedSessionIds(controller.signal);
+    const rejected = expect(scan).rejects.toThrow("closed");
+    await appServer.waitForRequest("thread/list");
+    controller.abort();
+    await rejected;
+    expect(kill).toHaveBeenCalled();
+  });
+
+  test("reads native archives across pages without resuming threads", async () => {
+    const requests: unknown[] = [];
+    const appServer = createFakeCodexAppServer({
+      "thread/list": (params) => {
+        requests.push(params);
+        return params.cursor
+          ? { data: [{ id: "older-archive" }], nextCursor: null }
+          : { data: [{ id: "recent-archive" }], nextCursor: "next" };
+      },
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+    expect(await provider.listArchivedSessionIds(new AbortController().signal)).toEqual([
+      "recent-archive",
+      "older-archive",
+    ]);
+    expect(requests).toEqual([
+      { archived: true, modelProviders: [], limit: 100 },
+      { archived: true, modelProviders: [], limit: 100, cursor: "next" },
+    ]);
+    appServer.assertNoErrors();
+  });
+
+  test("does not unarchive Codex when an active Paseo agent resumes an archived thread", async () => {
     const threadRequests: string[] = [];
-    let resumeAttempts = 0;
     const appServer = createFakeCodexAppServer({
       "thread/loaded/list": () => {
         threadRequests.push("thread/loaded/list");
@@ -2225,32 +2261,19 @@ describe("Codex app-server provider", () => {
       },
       "thread/resume": () => {
         threadRequests.push("thread/resume");
-        resumeAttempts += 1;
-        if (resumeAttempts === 1) {
-          return Promise.reject(new Error(archivedThreadErrorMessage("archived-thread-id")));
-        }
-        return { thread: { id: "archived-thread-id" } };
+        return Promise.reject(new Error(archivedThreadErrorMessage("archived-thread-id")));
       },
       "thread/unarchive": () => {
         threadRequests.push("thread/unarchive");
         return { thread: { id: "archived-thread-id" } };
       },
-      "thread/read": () => {
-        threadRequests.push("thread/read");
-        return { thread: { turns: [] } };
-      },
     });
     const provider = createProviderWithFakeAppServer(appServer);
 
-    const session = await provider.resumeSession(archivedThreadHandle());
-
-    expect(threadRequests).toEqual([
-      "thread/loaded/list",
-      "thread/resume",
-      "thread/unarchive",
-      "thread/resume",
-    ]);
-    await session.close();
+    await expect(provider.resumeSession(archivedThreadHandle())).rejects.toThrow(
+      archivedThreadErrorMessage("archived-thread-id"),
+    );
+    expect(threadRequests).toEqual(["thread/loaded/list", "thread/resume"]);
     appServer.assertNoErrors();
   });
 
@@ -7923,6 +7946,23 @@ describe("Codex importable sessions", () => {
     appServer.assertNoErrors();
   });
 
+  test("bulk import traverses beyond the picker scan limit and requests main session sources", async () => {
+    const threads = threadsUsedInReverseCreationOrder(650);
+    const handler = cappedThreadListHandler(threads);
+    const appServer = createFakeCodexAppServer({
+      "thread/list": (params) => {
+        expect(params).toMatchObject({ sourceKinds: ["cli", "vscode", "appServer", "unknown"] });
+        return handler(params);
+      },
+    });
+    const provider = createProviderWithFakeAppServer(appServer);
+    const sessions = await provider.listImportableSessions({ all: true });
+    expect(sessions.map((session) => session.providerHandleId)).toEqual(
+      threads.map((thread) => thread.id),
+    );
+    appServer.assertNoErrors();
+  });
+
   test("keeps the scanned window on the most recently used threads", async () => {
     const threads = threadsUsedInReverseCreationOrder(550);
     const appServer = createFakeCodexAppServer({
@@ -8155,7 +8195,12 @@ describe("Codex importable sessions", () => {
       },
       {
         method: "thread/list",
-        params: { limit: 50, sortKey: "updated_at", cwd: "/workspace/project-a" },
+        params: {
+          limit: 50,
+          sortKey: "updated_at",
+          cwd: "/workspace/project-a",
+          sourceKinds: ["cli", "vscode", "appServer", "unknown"],
+        },
       },
     ]);
   });

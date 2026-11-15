@@ -4,12 +4,16 @@
 
 Controlled by `APP_VARIANT` in `packages/app/app.config.js` (vanilla Expo, no custom Gradle plugin):
 
-| Variant       | App name    | Package ID       |
-| ------------- | ----------- | ---------------- |
-| `production`  | Paseo       | `sh.paseo`       |
-| `development` | Paseo Debug | `sh.paseo.debug` |
+| Variant       | App name    | Package ID        |
+| ------------- | ----------- | ----------------- |
+| `production`  | Paseo       | `com.norcy.paseo` |
+| `development` | Paseo Debug | `sh.paseo.debug`  |
 
 EAS profiles: `development`, `production`, and `production-apk` in `packages/app/eas.json`.
+
+The fork's production Android package is separate from upstream `sh.paseo`, so both can
+stay installed. Package IDs do not change signing keys. Switching package IDs creates a
+separate app with its own data and pairing. iOS bundle identifiers remain unchanged.
 
 `development` uses Android `debug`.
 
@@ -92,19 +96,31 @@ Run its native regression tests from `packages/app/android` after prebuild:
 From repo root:
 
 ```bash
-npm run build:apk       # Universal dogfood APK: 32/64-bit ARM and x86
-npm run build:apk:arm64 # Smaller dogfood APK for ARM64 phones
+npm run build:apk           # ARM64 dogfood APK for the Redmi phone
+npm run build:apk:arm64     # Explicit ARM64 alias
+npm run build:apk:universal # All four ABIs, only when explicitly requested
+npm run install:apk         # Optimized ARM64 build + reinstall on one USB device
 npm run dev:android     # Build/install the debug app and start development
 npm run dev:ios         # Build/install the iOS development app
 ```
 
-`build:apk` writes `artifacts/paseo-dogfood-universal.apk`; `build:apk:arm64` writes
-`artifacts/paseo-dogfood-arm64.apk`. Neither command launches or installs on a device. Both enable
+`build:apk` and `build:apk:arm64` write `artifacts/paseo-dogfood-arm64.apk`;
+`build:apk:universal` writes `artifacts/paseo-dogfood-universal.apk`. These commands do not
+launch or install on a device. All enable
 `PASEO_WATCHDOG_BUILD=1`, the production React profiling renderer, and Android's shell-profileable
-flag. These builds keep the production package ID (`sh.paseo`) and release optimizations. Use this APK for
+flag. These builds keep the production package ID (`com.norcy.paseo`) and release optimizations. Use this APK for
 personal dogfooding. Android system-trace spans require the separate `PASEO_PROFILE_BUILD=1` flag;
 watchdog recording does not send duplicate spans to that sink by default. Normal store/release
 workflows leave diagnostics disabled.
+
+Local dogfood builds retain the generated Android project and Gradle daemon. Expo SDK 57
+prebuild defaults to cleaning: keep `--no-clean` explicit to preserve native build outputs.
+Build only `:app:assembleRelease`; the unqualified task also assembles dependency AARs.
+Local builds use Maven Central’s Google mirror to avoid the Central endpoint’s 403 responses.
+They regenerate the JS bundle while retaining Metro transformations, with separate cache identities
+for watchdog, F-Droid, and profiling modes. The local Gradle init script selects the Expo CLI wrapper;
+normal store builds keep their bundling and repository configuration.
+Stage timings are printed, and Gradle task timings are saved under `packages/app/android/build/reports/profile/`.
 
 The older `android`, `android:development`, and `ios` commands remain aliases for development.
 `android:production` still builds and installs a release through Expo; use `build:apk` when you
@@ -155,7 +171,7 @@ For an ordinary release APK with system trace markers only:
 PASEO_PROFILE_BUILD=1 npm run android:production
 ```
 
-Those markers emit only while a system trace records `sh.paseo` (`perfetto -a sh.paseo ...`);
+Those markers emit only while a system trace records `com.norcy.paseo` (`perfetto -a com.norcy.paseo ...`);
 they do not produce Downloads files.
 
 ## Running on an emulator against a worktree daemon

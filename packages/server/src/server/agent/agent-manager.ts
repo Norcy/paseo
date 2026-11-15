@@ -1192,6 +1192,67 @@ export class AgentManager {
     return retired;
   }
 
+  private nativeArchiveRefresh?: Promise<void>;
+  private nativeArchiveRefreshedAt = 0;
+
+  async refreshNativeArchives(options?: { agentId: string }): Promise<void> {
+    if (options) {
+      await this.refreshNativeArchivesNow(options.agentId);
+      return;
+    }
+    if (this.nativeArchiveRefresh) return this.nativeArchiveRefresh;
+    if (!this.registry || Date.now() - this.nativeArchiveRefreshedAt < 15_000) return;
+    this.nativeArchiveRefresh = this.refreshNativeArchivesNow()
+      .catch((err) => {
+        this.logger.warn({ err }, "Failed to synchronize native archives");
+      })
+      .finally(() => {
+        this.nativeArchiveRefresh = undefined;
+      });
+    return this.nativeArchiveRefresh;
+  }
+
+  private async refreshNativeArchivesNow(agentId?: string): Promise<void> {
+    const registry = this.requireRegistry();
+    let records: StoredAgentRecord[];
+    if (agentId) {
+      const record = await registry.get(agentId);
+      records = record && !record.archivedAt ? [record] : [];
+    } else {
+      records = await registry.listActive();
+    }
+    await Promise.all(
+      Array.from(this.clients, async ([provider, client]) => {
+        const candidates = records.filter(
+          (record) => record.provider === provider && record.persistence && !record.internal,
+        );
+        if (!client.listArchivedSessionIds || candidates.length === 0) return;
+        try {
+          const archived = new Set(
+            await client.listArchivedSessionIds(AbortSignal.timeout(15_000)),
+          );
+          for (const record of candidates) {
+            if (!archived.has(record.persistence!.sessionId)) continue;
+            await this.runLifecycleMutation(record.id, async () => {
+              const current = await this.requireRegistry().get(record.id);
+              if (
+                !current ||
+                current.archivedAt ||
+                current.persistence?.sessionId !== record.persistence!.sessionId
+              )
+                return;
+              await this.archiveSnapshotUnlocked(record.id, new Date().toISOString(), true);
+            });
+          }
+        } catch (err) {
+          if (agentId) throw err;
+          this.logger.warn({ err, provider }, "Failed to synchronize native archives");
+        }
+      }),
+    );
+    if (!agentId) this.nativeArchiveRefreshedAt = Date.now();
+  }
+
   async listImportableSessions(
     options?: ImportablePersistedAgentQueryOptions,
   ): Promise<ManagedImportableSessionsResult> {
@@ -1206,6 +1267,7 @@ export class AgentManager {
         try {
           const sessions = await withTimeout(
             client.listImportableSessions!({
+              all: options?.all,
               limit: options?.limit,
               query: options?.query,
               scanLimit: options?.scanLimit,
@@ -2211,6 +2273,7 @@ export class AgentManager {
   private async archiveAgentUnlocked(
     agentId: string,
     requestedArchivedAt?: string,
+    nativeAlreadyArchived = false,
   ): Promise<{ archivedAt: string }> {
     const agent = this.requireAgent(agentId);
     if (agent.internal) {
@@ -2246,7 +2309,8 @@ export class AgentManager {
     const { archivedAt } = archivedRecord;
     agent.updatedAt = new Date(archivedRecord.updatedAt);
     await this.closeAgentRuntime(agentId);
-    await this.syncNativeArchiveState(stored.provider, stored.persistence, "archive");
+    if (!nativeAlreadyArchived)
+      await this.syncNativeArchiveState(stored.provider, stored.persistence, "archive");
     this.discardRetainedAgentState(agentId);
 
     await this.cascadeArchiveChildren(archivedRecord);
@@ -2842,12 +2906,13 @@ export class AgentManager {
   private async archiveSnapshotUnlocked(
     agentId: string,
     archivedAt: string,
+    nativeAlreadyArchived = false,
   ): Promise<StoredAgentRecord> {
     const registry = this.requireRegistry();
     // A stored-only archive can have waited behind a persisted resume. Reuse the
     // live archive transition so its newly acquired runtime is closed as well.
     if (this.agents.has(agentId)) {
-      await this.archiveAgentUnlocked(agentId, archivedAt);
+      await this.archiveAgentUnlocked(agentId, archivedAt, nativeAlreadyArchived);
       const archivedRecord = await registry.get(agentId);
       if (!archivedRecord) throw new Error(`Agent not found: ${agentId}`);
       return archivedRecord;
@@ -2860,7 +2925,8 @@ export class AgentManager {
 
     const nextRecord = await this.persistArchivedRecord(record, { archivedAt });
 
-    await this.syncNativeArchiveState(record.provider, record.persistence, "archive");
+    if (!nativeAlreadyArchived)
+      await this.syncNativeArchiveState(record.provider, record.persistence, "archive");
 
     this.discardRetainedAgentState(agentId);
     if (!nextRecord.internal) this.dispatchStoredAgentState(nextRecord);

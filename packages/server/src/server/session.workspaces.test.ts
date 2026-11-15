@@ -10185,6 +10185,46 @@ test("workspace PR status survives session cleanup and reconnect", async () => {
   }
 });
 
+test("bulk Codex import runs independently of its start request and exposes listing failures", async () => {
+  const emitted: SessionOutboundMessage[] = [];
+  const listing = deferred<{
+    sessions: unknown[];
+    providerErrors: Array<{ provider: string; message: string }>;
+  }>();
+  const listImportableSessions = vi.fn(() => listing.promise);
+  const session = createSessionForWorkspaceTests({
+    onMessage: (message) => {
+      if (isSessionOutboundMessage(message)) emitted.push(message);
+    },
+    agentManager: { listImportableSessions },
+  });
+  await session.handleMessage({ type: "agent.codex.import_all.request", requestId: "bulk-start" });
+  expect(findByType(emitted, "agent.codex.import_all.response")?.payload).toMatchObject({
+    requestId: "bulk-start",
+    job: { status: "running" },
+  });
+  await session.handleMessage({ type: "agent.codex.import_all.request", requestId: "bulk-repeat" });
+  expect(listImportableSessions).toHaveBeenCalledTimes(1);
+  listing.resolve({
+    sessions: [],
+    providerErrors: [{ provider: "codex", message: "Codex unavailable" }],
+  });
+  await waitForImmediate();
+  await session.handleMessage({ type: "agent.codex.get_import.request", requestId: "bulk-status" });
+  expect(findByType(emitted, "agent.codex.get_import.response")?.payload).toEqual({
+    requestId: "bulk-status",
+    job: {
+      status: "completed",
+      total: 0,
+      imported: 0,
+      skipped: 0,
+      currentTitle: null,
+      failures: [],
+      error: "Codex unavailable",
+    },
+  });
+});
+
 test("path archive of an archived exact child leaves its active parent untouched", async () => {
   const now = "2026-03-30T15:00:00.000Z";
   const root = mkdtempSync(path.join(tmpdir(), "archive-exact-child-"));

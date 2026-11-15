@@ -439,6 +439,7 @@ export const es: TranslationResources = {
     },
   },
   importSession: {
+    bulk: en.importSession.bulk,
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Importar sesión",
     searchPlaceholder: "Buscar sesiones...",

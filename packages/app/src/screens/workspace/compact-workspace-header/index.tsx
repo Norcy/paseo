@@ -1,11 +1,11 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Platform } from "react-native";
+import { Fragment, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { CompactHeader } from "@/components/headers/compact-header";
 import {
   EXPLORER_TOGGLE_KEYS,
   WorkspaceExplorerToggle,
 } from "@/screens/workspace/workspace-explorer-toggle";
-import { WorkspaceHeaderProjectRow } from "@/screens/workspace/workspace-header-project-row";
 import {
   useWindowLayout,
   resolveWorkspaceActionPlacement,
@@ -17,11 +17,8 @@ import { IconButtonChromeProvider } from "@/components/ui/icon-button-chrome";
 export { MobileWorkspaceTabSwitcher } from "./tab-switcher";
 
 interface CompactWorkspaceHeaderProps {
-  serverId: string;
   isLoading: boolean;
   title: string;
-  subtitle: string;
-  isSubtitleDistinct: boolean;
   onToggleExplorer: () => void;
   explorerToggleLabel: string;
   explorerToggleAccessibilityState: { expanded: boolean };
@@ -32,37 +29,25 @@ interface CompactWorkspaceHeaderProps {
   actionsActive: boolean;
 }
 
-/** The compact header with the workspace's project row and controls. */
+/** The compact conversation title and controls. */
 export function CompactWorkspaceHeader({
   isLoading,
   title,
-  subtitle,
-  isSubtitleDistinct,
   onToggleExplorer,
   explorerToggleLabel,
   explorerToggleAccessibilityState,
   children,
   tabSwitcher,
-  serverId,
   headerVariant,
   actionsActive,
 }: CompactWorkspaceHeaderProps) {
   const { t } = useTranslation();
   const actionsInBar = resolveWorkspaceActionPlacement(useWindowLayout()) === "vertical-bar";
-  const projectRow = useMemo(
-    () => (
-      <WorkspaceHeaderProjectRow
-        subtitle={subtitle}
-        isSubtitleDistinct={isSubtitleDistinct}
-        serverId={serverId}
-      />
-    ),
-    [subtitle, isSubtitleDistinct, serverId],
-  );
+  const isAndroid = Platform.OS === "android";
   const symbols = {
-    "tab-count": tabSwitcher,
+    "tab-count": headerVariant === "compact" || isAndroid ? null : tabSwitcher,
     overflow: children,
-    explorer: (
+    explorer: !isAndroid ? (
       <WorkspaceExplorerToggle
         onPress={onToggleExplorer}
         label={explorerToggleLabel}
@@ -71,7 +56,7 @@ export function CompactWorkspaceHeader({
         accessibilityState={explorerToggleAccessibilityState}
         mobile
       />
-    ),
+    ) : null,
   };
   const actions = resolveWorkspaceBarActions(headerVariant).map((symbol) => (
     <Fragment key={symbol}>{symbols[symbol]}</Fragment>
@@ -84,7 +69,6 @@ export function CompactWorkspaceHeader({
           navigation="menu"
           title={title}
           titleTestID="workspace-header-title"
-          subtitle={projectRow}
           loading={isLoading}
           actions={actionsInBar ? undefined : actions}
         />

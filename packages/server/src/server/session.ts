@@ -1,3 +1,4 @@
+import { codexSessionImportForHost } from "./agent/codex-import.js";
 import { DiffSession } from "./diff/index.js";
 import { type WorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import type { AgentMessageDelivery } from "./agent/agent-messages/index.js";
@@ -162,6 +163,7 @@ import {
   ImportSessionsRequestError,
   importProviderSession,
   listImportableProviderSessions,
+  isMetadataGenerationSession,
   normalizeImportAgentRequest,
 } from "./agent/import-sessions.js";
 import { listProjectSuggestions, ProjectSuggestionsRequestError } from "./project-suggestions.js";
@@ -1439,6 +1441,20 @@ export class Session {
     timelines: Record<string, "current" | "behind">;
     agents: Record<string, AgentSnapshotPayload>;
   }> {
+    const unchecked = new Set<string>();
+    await Promise.all(
+      Object.entries(this.compareTimelineCursors(agentIds, cursors)).map(
+        async ([agentId, state]) => {
+          if (state !== "current") return;
+          try {
+            await this.agentManager.refreshNativeArchives({ agentId });
+          } catch {
+            // Let the timeline fetch report the archive check error through its normal response.
+            unchecked.add(agentId);
+          }
+        },
+      ),
+    );
     const snapshots = await Promise.all(
       agentIds.flatMap((agentId) => {
         const agent = cursors[agentId] ? this.agentManager.getAgent(agentId) : null;
@@ -1447,6 +1463,7 @@ export class Session {
     );
     // Compared after the await, so a row appended while reading the snapshots answers behind.
     const timelines = this.compareTimelineCursors(agentIds, cursors);
+    for (const agentId of unchecked) timelines[agentId] = "behind";
     const agents: Record<string, AgentSnapshotPayload> = {};
     for (const snapshot of snapshots) {
       if (timelines[snapshot.id] === "current") agents[snapshot.id] = snapshot;
@@ -3447,6 +3464,9 @@ export class Session {
 
   private dispatchProviderMessage(msg: SessionInboundMessage): Promise<void> | undefined {
     switch (msg.type) {
+      case "agent.codex.import_all.request":
+      case "agent.codex.get_import.request":
+        return this.handleCodexImportRequest(msg);
       case "list_provider_models_request":
         return this.providerCatalogSession.handleListProviderModelsRequest(msg);
       case "list_provider_modes_request":
@@ -5077,6 +5097,70 @@ export class Session {
         },
       });
     }
+  }
+
+  private async handleCodexImportRequest(
+    msg: Extract<
+      SessionInboundMessage,
+      { type: "agent.codex.import_all.request" | "agent.codex.get_import.request" }
+    >,
+  ): Promise<void> {
+    const importer = codexSessionImportForHost(this.agentManager);
+    if (msg.type === "agent.codex.get_import.request") {
+      this.emit({
+        type: "agent.codex.get_import.response",
+        payload: { requestId: msg.requestId, job: importer.get() },
+      });
+      return;
+    }
+    const job = importer.start({
+      list: async () => {
+        const result = await this.agentManager.listImportableSessions({
+          providerFilter: new Set(["codex"]),
+          all: true,
+          limit: Number.MAX_SAFE_INTEGER,
+        });
+        if (result.providerErrors.length)
+          throw new Error(result.providerErrors.map((entry) => entry.message).join("\n"));
+        return result.sessions.filter((session) => !isMetadataGenerationSession(session));
+      },
+      isImported: async (sessionId) =>
+        (await this.agentStorage.listByProviderSession("codex", sessionId)).length > 0,
+      import: async (session) => {
+        if (!(await stat(session.cwd)).isDirectory())
+          throw new Error(`Not a directory: ${session.cwd}`);
+        const { snapshot, createdWorkspace } = await importProviderSession({
+          request: {
+            provider: "codex",
+            providerHandleId: session.providerHandleId,
+            cwd: session.cwd,
+            requestId: msg.requestId,
+          },
+          workspaceProvisioning: this.workspaceProvisioning,
+          agentManager: this.agentManager,
+          agentStorage: this.agentStorage,
+          logger: this.sessionLogger,
+        });
+        if (createdWorkspace) await this.registerWorkspaceForImportedAgent(createdWorkspace);
+        const runtime = this.agentManager
+          .getRuntimeCleanupCandidates()
+          .find((candidate) => candidate.agentId === snapshot.id);
+        if (runtime?.isEligible()) {
+          try {
+            if (await runtime.canStopRuntime?.()) await runtime.closeIfEligible(() => true);
+          } catch (error) {
+            this.sessionLogger.warn(
+              { err: error, agentId: snapshot.id },
+              "Failed to release imported Codex runtime",
+            );
+          }
+        }
+      },
+    });
+    this.emit({
+      type: "agent.codex.import_all.response",
+      payload: { requestId: msg.requestId, job },
+    });
   }
 
   private async handleImportAgentRequest(
@@ -6736,6 +6820,7 @@ export class Session {
         this.refreshObservationProducers();
       }
 
+      void this.agentManager.refreshNativeArchives();
       const payload = request.sync
         ? await this.readAgentDirectorySync(request, backgroundVisibility)
         : await this.listFetchAgentsEntries(request, backgroundVisibility);
@@ -6894,6 +6979,7 @@ export class Session {
         },
         "fetch_workspaces_request_received",
       );
+      void this.agentManager.refreshNativeArchives();
       const payload = request.sync
         ? await this.readWorkspaceDirectorySync(request)
         : await this.listFetchWorkspacesEntries(request);
@@ -8388,6 +8474,7 @@ export class Session {
       : undefined;
 
     try {
+      await this.agentManager.refreshNativeArchives({ agentId: msg.agentId });
       const snapshot = await ensureAgentLoaded(msg.agentId, {
         agentManager: this.agentManager,
         agentStorage: this.agentStorage,

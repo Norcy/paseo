@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { createTestLogger } from "../../test-utils/test-logger.js";
 import { AgentManager } from "./agent-manager.js";
@@ -471,3 +471,122 @@ test.each(["mode", "thinking", "rewind"])(
   },
   30000,
 );
+
+test.each(["live", "closed"])(
+  "synchronizes confirmed native archives for %s agents without archiving Codex again",
+  async (residency) => {
+    const root = await mkdtemp(path.join(tmpdir(), "native-archive-sync-"));
+    const logger = createTestLogger();
+    const storage = new AgentStorage(path.join(root, "agents"), logger);
+    const clients = createTestAgentClients();
+    const archivedIds: string[] = [];
+    clients.codex!.listArchivedSessionIds = async () => archivedIds;
+    const nativeArchive = vi.fn(async () => {});
+    clients.codex!.archiveNativeSession = nativeArchive;
+    const manager = new AgentManager({ clients, registry: storage, logger });
+    try {
+      const archived = await manager.createAgent({ provider: "codex", cwd: root }, undefined, {
+        workspaceId: "workspace-native",
+      });
+      const active = await manager.createAgent({ provider: "codex", cwd: root }, undefined, {
+        workspaceId: "workspace-native",
+      });
+      expect(archived.persistence?.sessionId).toBeTruthy();
+      archivedIds.push(archived.persistence!.sessionId);
+      if (residency === "closed") await manager.closeAgent(archived.id);
+      await manager.refreshNativeArchives();
+      expect(nativeArchive).not.toHaveBeenCalled();
+      expect((await storage.get(archived.id))?.archivedAt).toEqual(expect.any(String));
+      expect((await storage.get(active.id))?.archivedAt).toBeFalsy();
+    } finally {
+      for (const agent of manager.listAgents()) await manager.closeAgent(agent.id);
+      await manager.flush();
+      await storage.flush();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test.each(["live", "closed"])(
+  "opening a %s Codex agent checks native archives again inside the refresh interval",
+  async (residency) => {
+    const clients = createTestAgentClients();
+    const archivedIds: string[] = [];
+    clients.codex!.listArchivedSessionIds = async () => archivedIds;
+    const nativeUnarchive = vi.fn(async () => {});
+    clients.codex!.unarchiveNativeSession = nativeUnarchive;
+    const ctx = await createDaemonTestContext({ agentClients: clients });
+    const cwd = await mkdtemp(path.join(tmpdir(), "open-native-archive-"));
+    try {
+      const agent = await ctx.client.createAgent({ provider: "codex", cwd });
+      const manager = ctx.daemon.daemon.agentManager;
+      if (residency === "closed") await manager.closeAgent(agent.id);
+      const opened = await ctx.client.fetchAgentTimeline(agent.id);
+      expect(opened.agent?.archivedAt).toBeNull();
+      const stored = await ctx.daemon.daemon.agentStorage.get(agent.id);
+      archivedIds.push(stored!.persistence!.sessionId);
+      if (residency === "closed") await manager.closeAgent(agent.id);
+      const reopened = await ctx.client.fetchAgentTimeline(agent.id);
+      expect(reopened.agent?.archivedAt).toEqual(expect.any(String));
+      expect(
+        (await ctx.client.fetchAgents({})).entries.map((entry) => entry.agent.id),
+      ).not.toContain(agent.id);
+      expect(nativeUnarchive).not.toHaveBeenCalled();
+    } finally {
+      await ctx.cleanup();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+);
+
+test("a current timeline cursor does not hide a Codex archive", async () => {
+  const clients = createTestAgentClients();
+  const archivedIds: string[] = [];
+  clients.codex!.listArchivedSessionIds = async () => archivedIds;
+  const ctx = await createDaemonTestContext({ agentClients: clients });
+  const cwd = await mkdtemp(path.join(tmpdir(), "current-timeline-native-archive-"));
+  try {
+    const agent = await ctx.client.createAgent({ provider: "codex", cwd });
+    const { agentManager, agentStorage } = ctx.daemon.daemon;
+    const cursor = agentManager.getLoadedTimelineHead(agent.id)!;
+    const options = { cursors: { [agent.id]: cursor } };
+    const initial = ctx.client.observeTimeline([agent.id], options);
+    expect((await initial.ready)?.timelines?.[agent.id]).toBe("current");
+    await initial.release();
+
+    const stored = await agentStorage.get(agent.id);
+    archivedIds.push(stored!.persistence!.sessionId);
+    const reopened = ctx.client.observeTimeline([agent.id], options);
+    expect((await reopened.ready)?.timelines?.[agent.id]).toBe("behind");
+    expect((await agentStorage.get(agent.id))?.archivedAt).toEqual(expect.any(String));
+    await reopened.release();
+  } finally {
+    await ctx.cleanup();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("an archive check failure blocks opening and retry checks again before resuming", async () => {
+  const clients = createTestAgentClients();
+  const scan = vi.fn(async (): Promise<string[]> => []);
+  clients.codex!.listArchivedSessionIds = scan;
+  const ctx = await createDaemonTestContext({ agentClients: clients });
+  const cwd = await mkdtemp(path.join(tmpdir(), "open-native-archive-failure-"));
+  try {
+    const agent = await ctx.client.createAgent({ provider: "codex", cwd });
+    const manager = ctx.daemon.daemon.agentManager;
+    await manager.closeAgent(agent.id);
+    scan.mockRejectedValue(new Error("Codex archive check failed"));
+    await expect(ctx.client.fetchAgentTimeline(agent.id)).rejects.toThrow(
+      "Codex archive check failed",
+    );
+    expect(manager.getAgent(agent.id)).toBeNull();
+    scan.mockResolvedValue([]);
+    const retried = await ctx.client.fetchAgentTimeline(agent.id);
+    expect(retried.agent?.archivedAt).toBeNull();
+    expect(retried.agent?.status).toBe("idle");
+  } finally {
+    await ctx.cleanup();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

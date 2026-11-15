@@ -5,6 +5,7 @@ import {
   CircleGauge,
   CircleHelp,
   FolderPlus,
+  Import,
   Plus,
   Server,
   Settings,
@@ -36,8 +37,10 @@ const ThemedCircleGauge = withUnistyles(CircleGauge);
 const ThemedServer = withUnistyles(Server);
 const ThemedCircleHelp = withUnistyles(CircleHelp);
 const ThemedSettings = withUnistyles(Settings);
+const ThemedImport = withUnistyles(Import);
 const ThemedPlus = withUnistyles(Plus);
 const addProjectLeading = <ThemedFolderPlus size={ICON_SIZE.sm} uniProps={mutedIconMapping} />;
+const importLeading = <ThemedImport size={ICON_SIZE.sm} uniProps={mutedIconMapping} />;
 const usageLeading = <ThemedCircleGauge size={ICON_SIZE.sm} uniProps={mutedIconMapping} />;
 const hostsLeading = <ThemedServer size={ICON_SIZE.sm} uniProps={mutedIconMapping} />;
 const helpLeading = <ThemedCircleHelp size={ICON_SIZE.sm} uniProps={mutedIconMapping} />;
@@ -52,6 +55,7 @@ export interface SidebarFooterOverflowMenuProps {
   actions: readonly SidebarFooterAction[];
   labels: { addProject: string; hosts: string; settings: string; usage: string };
   onAddProject: () => void;
+  onImportCodex: () => void;
   onSettings: () => void;
   onAddHost: () => void;
   onOpenHostSettings: (serverId: string) => void;
@@ -66,6 +70,7 @@ export function SidebarFooterOverflowMenu({
   actions,
   labels,
   onAddProject,
+  onImportCodex,
   onSettings,
   onAddHost,
   onOpenHostSettings,
@@ -112,6 +117,17 @@ export function SidebarFooterOverflowMenu({
             onSelect={onAddProject}
           >
             {labels.addProject}
+          </DropdownMenuItem>
+        );
+      case "import-codex":
+        return (
+          <DropdownMenuItem
+            key={action}
+            testID="sidebar-import-codex"
+            leading={importLeading}
+            onSelect={onImportCodex}
+          >
+            {t("importSession.bulk.title")}
           </DropdownMenuItem>
         );
       case "usage":

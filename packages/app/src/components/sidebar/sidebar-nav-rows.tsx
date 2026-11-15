@@ -2,7 +2,7 @@ import { router, usePathname } from "expo-router";
 import { CalendarClock, History, Plus, Search } from "lucide-react-native";
 import { memo, useCallback, useMemo, useRef, type ComponentType, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { View, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { SidebarHeaderRow } from "@/components/sidebar/sidebar-header-row";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
@@ -42,7 +42,15 @@ interface SidebarNavRowsProps extends SidebarNavRowProps {
  */
 export function SidebarNavRows({ style, onBeforeNavigate, firstRowTrailing }: SidebarNavRowsProps) {
   const { items } = useSidebarNavItems("header");
-  const visibleItems = useMemo(() => items.filter((item) => item.visible), [items]);
+  const visibleItems = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          item.visible &&
+          !(Platform.OS === "android" && item.kind === "builtin" && item.id === "new-workspace"),
+      ),
+    [items],
+  );
   const groupRef = useRef<View | null>(null);
 
   if (visibleItems.length === 0 && !firstRowTrailing) return null;

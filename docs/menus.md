@@ -172,15 +172,14 @@ and a column of icons there is decoration competing with the values you actually
   nothing. Compact is the other way round: `minHeight` leads and the label centres in it.
 - **A row owns its fill; `MenuPage` owns the spacing between rows.** The vertical inset above the
   first row and below the last, and the gap between rows, are the page's — one knob each,
-  `MENU_ROW_GAP` being the one a redesign turns. A row that carried vertical margin would be
+  with compact pages using more space than pointer menus. A row that carried vertical margin would be
   serving both at once, and since margins don't collapse it would land as one unit at the edges and
   two between rows, so shrinking the gap would eat the inset with it. Horizontal inset does stay on
   the row: there is one left edge and one right edge, so nothing is doubling up.
 - `MenuPage` is also what provides a page's depth, so the popover and the sheet cannot disagree
   about what a page is. Every entry point goes through it — root, flyout, pushed sheet page.
 - The gap reaches a page's **direct children**. A group of rows wrapped in a `View` of its own drops
-  out of it; at the current gap of zero there is nothing to lose, but anything above zero wants that
-  wrapper to carry the page style too.
+  out of it. Use fragments for groups of menu items so they keep the shared compact spacing.
 - The separator is the one row-level thing that asks for vertical space of its own, and now that
   rows carry none, that is still one number controlling one gap. It takes no horizontal margin and
   the page has no horizontal padding, so the rule runs the full width of the surface.

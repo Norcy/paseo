@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+先读 [AGENTS.fork.md](AGENTS.fork.md)。它是本仓库的最高项目规则；与其他仓库文档冲突时，以它为准。
+
 Paseo is a mobile app for monitoring and controlling your local AI coding agents from anywhere. Your dev environment, in your pocket. Connects directly to your actual development environment — your code stays on your machine.
 
 **Supported agents:** Claude Code, Codex, GitHub Copilot, OpenCode, Pi, Antigravity, and Muse Code.
@@ -23,6 +25,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 
 | Doc                                                                  | What's in it                                                                                                                   |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [docs/fork-changes.md](docs/fork-changes.md)                         | 本项目相对上游的用户体验差异；修改定制功能前先读，变更后同步更新                                                               |
 | [docs/product.md](docs/product.md)                                   | What Paseo is, who it's for, where it's going                                                                                  |
 | [docs/architecture.md](docs/architecture.md)                         | System design, package layering, WebSocket protocol, agent lifecycle, data flow                                                |
 | [docs/agent-lifecycle.md](docs/agent-lifecycle.md)                   | Agent states, parent/child relationships, archive semantics, tabs vs archive, subagents track                                  |
@@ -114,8 +117,6 @@ npm run format:check                 # Check formatting without writing
 
 Repo dev commands use checkout-local state by default. In this checkout, `PASEO_HOME` resolves to `.dev/paseo-home`, and `npm run cli -- ...` targets that same dev home automatically. The packaged desktop app and production-style daemon keep using `~/.paseo` on port `6767`.
 
-When Mo requests an APK, use `npm run build:apk:arm64` for an ARM64 build: writes `artifacts/paseo-dogfood-arm64.apk` with diagnostics without starting a device; `npm run build:apk` builds all four Android architectures.
-
 See [docs/development.md](docs/development.md) for full setup, build sync requirements, and debugging.
 
 ## Release branches
@@ -143,6 +144,9 @@ release builds in a short-lived release workspace from `origin/main` or a releas
   - `npm run build:server` — rebuild highlight, relay, protocol, client, server, and CLI when server/CLI types may be stale.
   - Do not patch inferred callback parameters or add local duplicate types just to silence stale declaration errors.
 - **Run `npm run format` before committing.** This repo uses Biome for formatting. Do not manually fix formatting — let the formatter handle it.
+- Commit each completed change after verification; do not wait for a separate request to commit.
+- Keep commits small and grouped by one coherent change. Stage and commit each independently reviewable batch separately; do not mix unrelated fixes or existing staged work.
+- Finish all requested changes before the final Android build and install; build and install once after the full change set is ready.
 - **Always use npm scripts for linting and formatting.** Do not run tools directly with `npx eslint`, `npx oxfmt`, `npx oxlint`, or package-local binaries. For targeted checks, pass file paths through the npm script:
   - `npm run lint -- packages/app/src/components/message.tsx`
   - `npm run format:files -- CLAUDE.md packages/app/src/components/message.tsx`

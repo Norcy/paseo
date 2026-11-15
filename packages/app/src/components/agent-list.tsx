@@ -1,4 +1,3 @@
-import { Modal } from "@/components/ui/modal";
 import {
   View,
   Text,
@@ -8,19 +7,16 @@ import {
   type ListRenderItem,
   type PressableStateCallbackType,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useCallback, useMemo, useState, type ReactElement } from "react";
+import { useCallback, useMemo, type ReactElement } from "react";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { useTimeAgo } from "@/hooks/use-time-ago";
 import { type AggregatedAgent } from "@/hooks/use-aggregated-agents";
-import { useSessionStore } from "@/stores/session-store";
 import { ChevronRight } from "lucide-react-native";
 import { useProviderIcon } from "@/components/provider-icons";
 import { navigateToAgent } from "@/utils/navigate-to-agent";
-import { useArchiveAgent } from "@/hooks/use-archive-agent";
 import { HighlightedText } from "@/components/ui/highlighted-text";
 import { ArchivedBadge } from "@/components/archived-badge";
 import { StatusBadge, type StatusBadgeVariant } from "@/components/ui/status-badge";
@@ -165,7 +161,6 @@ function SessionRow({
   showAttentionIndicator,
   showHostColumn,
   onPress,
-  onLongPress,
 }: {
   agent: AggregatedAgent;
   search?: string;
@@ -174,7 +169,6 @@ function SessionRow({
   showAttentionIndicator: boolean;
   showHostColumn: boolean;
   onPress: (agent: AggregatedAgent) => void;
-  onLongPress: (agent: AggregatedAgent) => void;
 }) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
@@ -207,7 +201,6 @@ function SessionRow({
   );
 
   const handlePress = useCallback(() => onPress(agent), [onPress, agent]);
-  const handleLongPress = useCallback(() => onLongPress(agent), [onLongPress, agent]);
 
   const showDesktopAttention =
     !isMobile && showAttentionIndicator && Boolean(agent.requiresAttention);
@@ -231,7 +224,6 @@ function SessionRow({
     <Pressable
       style={pressableStyle}
       onPress={handlePress}
-      onLongPress={handleLongPress}
       accessibilityRole="button"
       testID={`agent-row-${agent.serverId}-${agent.id}`}
     >
@@ -342,24 +334,10 @@ export function AgentList({
 }: AgentListProps) {
   const { theme } = useUnistyles();
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
-  const [actionAgent, setActionAgent] = useState<AggregatedAgent | null>(null);
   const isMobile = useIsCompactFormFactor();
-  const { archiveAgent } = useArchiveAgent();
-
-  const actionClient = useSessionStore((state) =>
-    actionAgent?.serverId ? (state.sessions[actionAgent.serverId]?.client ?? null) : null,
-  );
-
-  const isActionSheetVisible = actionAgent !== null;
-  const isActionDaemonUnavailable = Boolean(actionAgent?.serverId && !actionClient);
 
   const handleAgentPress = useCallback(
     (agent: AggregatedAgent) => {
-      if (isActionSheetVisible) {
-        return;
-      }
-
       const serverId = agent.serverId;
       const agentId = agent.id;
 
@@ -371,39 +349,8 @@ export function AgentList({
         pin: true,
       });
     },
-    [isActionSheetVisible, onAgentSelect],
+    [onAgentSelect],
   );
-
-  const handleAgentLongPress = useCallback(
-    (agent: AggregatedAgent) => {
-      const isRunning = agent.status === "running";
-      if (isRunning) {
-        setActionAgent(agent);
-        return;
-      }
-
-      const client = useSessionStore.getState().sessions[agent.serverId]?.client ?? null;
-      if (!client) {
-        setActionAgent(agent);
-        return;
-      }
-      void archiveAgent({ serverId: agent.serverId, agentId: agent.id }).catch(() => {});
-    },
-    [archiveAgent],
-  );
-
-  const handleCloseActionSheet = useCallback(() => {
-    setActionAgent(null);
-  }, []);
-
-  const handleArchiveAgent = useCallback(() => {
-    if (!actionAgent || !actionClient) {
-      return;
-    }
-    // Timeout errors are swallowed — the daemon will still process the archive
-    void archiveAgent({ serverId: actionAgent.serverId, agentId: actionAgent.id }).catch(() => {});
-    setActionAgent(null);
-  }, [actionAgent, actionClient, archiveAgent]);
 
   const flatItems = useMemo((): FlatListItem[] => {
     const buckets = new Map<DateSectionKey, AggregatedAgent[]>();
@@ -446,12 +393,10 @@ export function AgentList({
           showAttentionIndicator={showAttentionIndicator}
           showHostColumn={showHostColumn}
           onPress={handleAgentPress}
-          onLongPress={handleAgentLongPress}
         />
       );
     },
     [
-      handleAgentLongPress,
       handleAgentPress,
       isMobile,
       search,
@@ -468,15 +413,6 @@ export function AgentList({
     () => [theme.colors.foregroundMuted],
     [theme.colors.foregroundMuted],
   );
-  const sheetContainerStyle = useMemo(
-    () => [styles.sheetContainer, { paddingBottom: Math.max(insets.bottom, theme.spacing[6]) }],
-    [insets.bottom, theme.spacing],
-  );
-  const sheetArchiveTextStyle = useMemo(
-    () => [styles.sheetArchiveText, isActionDaemonUnavailable && styles.sheetArchiveTextDisabled],
-    [isActionDaemonUnavailable],
-  );
-
   const refreshControl = useMemo(
     () =>
       onRefresh ? (
@@ -491,55 +427,17 @@ export function AgentList({
   );
 
   return (
-    <>
-      <FlatList
-        data={flatItems}
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        ListFooterComponent={listFooterComponent}
-        refreshControl={refreshControl}
-      />
-
-      <Modal
-        visible={isActionSheetVisible}
-        animationType="fade"
-        transparent
-        onRequestClose={handleCloseActionSheet}
-      >
-        <View style={styles.sheetOverlay}>
-          <Pressable style={styles.sheetBackdrop} onPress={handleCloseActionSheet} />
-          <View style={sheetContainerStyle}>
-            <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>
-              {isActionDaemonUnavailable
-                ? t("agentList.archiveSheet.hostOffline")
-                : t("agentList.archiveSheet.runningAgent")}
-            </Text>
-            <View style={styles.sheetButtonRow}>
-              <Pressable
-                style={[styles.sheetButton, styles.sheetCancelButton]}
-                onPress={handleCloseActionSheet}
-                testID="agent-action-cancel"
-              >
-                <Text style={styles.sheetCancelText}>{t("common.actions.cancel")}</Text>
-              </Pressable>
-              <Pressable
-                disabled={isActionDaemonUnavailable}
-                style={[styles.sheetButton, styles.sheetArchiveButton]}
-                onPress={handleArchiveAgent}
-                testID="agent-action-archive"
-              >
-                <Text style={sheetArchiveTextStyle}>{t("agentList.archiveSheet.archive")}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    </>
+    <FlatList
+      data={flatItems}
+      style={styles.list}
+      contentContainerStyle={styles.listContent}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      ListFooterComponent={listFooterComponent}
+      refreshControl={refreshControl}
+    />
   );
 }
 
@@ -674,69 +572,5 @@ const styles = StyleSheet.create((theme) => ({
     width: 120,
     marginLeft: theme.spacing[4],
     textAlign: "right" as const,
-  },
-  sheetOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  sheetBackdrop: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  sheetContainer: {
-    backgroundColor: theme.colors.surface2,
-    borderTopLeftRadius: theme.borderRadius["2xl"],
-    borderTopRightRadius: theme.borderRadius["2xl"],
-    paddingHorizontal: theme.spacing[6],
-    paddingTop: theme.spacing[4],
-    gap: theme.spacing[4],
-  },
-  sheetHandle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.foregroundMuted,
-    opacity: 0.3,
-  },
-  sheetTitle: {
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.semibold,
-    color: theme.colors.foreground,
-    textAlign: "center",
-  },
-  sheetButtonRow: {
-    flexDirection: "row",
-    gap: theme.spacing[3],
-  },
-  sheetButton: {
-    flex: 1,
-    borderRadius: theme.borderRadius.lg,
-    paddingVertical: theme.spacing[4],
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sheetArchiveButton: {
-    backgroundColor: theme.colors.primary,
-  },
-  sheetArchiveText: {
-    color: theme.colors.primaryForeground,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: theme.fontSize.base,
-  },
-  sheetArchiveTextDisabled: {
-    opacity: 0.5,
-  },
-  sheetCancelButton: {
-    backgroundColor: theme.colors.surface1,
-  },
-  sheetCancelText: {
-    color: theme.colors.foreground,
-    fontWeight: theme.fontWeight.semibold,
-    fontSize: theme.fontSize.base,
   },
 }));

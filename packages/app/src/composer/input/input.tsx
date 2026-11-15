@@ -357,7 +357,6 @@ function AttachmentDropdown({
         offset={8}
         minWidth={220}
         testID="message-input-attachment-menu"
-        sheetTitle={addAttachmentLabel}
       >
         <AttachmentMenuList items={attachmentMenuItems} />
       </DropdownMenuContent>
@@ -2236,7 +2235,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           <View style={styles.rightButtonGroup}>
             {beforeVoiceContent}
             <VoiceButtonTooltip
-              visible={mode.showVoice}
+              visible={mode.showVoice && Platform.OS !== "android"}
               onVoicePress={handleVoicePress}
               isDictationStartEnabled={isDictationStartEnabled}
               voiceButtonAccessibilityLabel={voiceButtonAccessibilityLabel}

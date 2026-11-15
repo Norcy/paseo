@@ -11,7 +11,9 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import {
   View,
   Pressable,
+  ScrollView,
   Text,
+  Platform,
   StyleSheet as RNStyleSheet,
   type PressableStateCallbackType,
 } from "react-native";
@@ -402,7 +404,12 @@ function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
     args;
   if (queuedMessages.length === 0) return null;
   return (
-    <View style={styles.queueTrack}>
+    <ScrollView
+      style={styles.queueTrack}
+      contentContainerStyle={styles.queueTrackContent}
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+    >
       {queuedMessages.map((item) => (
         <QueuedMessageRow
           key={item.id}
@@ -413,7 +420,7 @@ function renderQueueTrack(args: RenderQueueTrackArgs): ReactElement | null {
           sendNowLabel={sendNowLabel}
         />
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -2167,7 +2174,7 @@ function ComposerContentImpl({
         isVoiceModeForAgent,
         hasAgent,
         isAgentRunning,
-        showVoice: mode.showVoice,
+        showVoice: mode.showVoice && Platform.OS !== "android",
       }) ? (
         <View style={styles.rightControls}>
           <ComposerVoiceModeButton
@@ -2198,7 +2205,7 @@ function ComposerContentImpl({
 
   const beforeVoiceContent = useMemo(
     () =>
-      hasAgent ? (
+      hasAgent && !(Platform.OS === "android" && isCompactFormFactor) ? (
         <View style={styles.contextWindowMeterSlot}>
           <ContextWindowMeter
             serverId={serverId}
@@ -2218,6 +2225,7 @@ function ComposerContentImpl({
       agentState.contextWindowUsedTokens,
       agentState.totalCostUsd,
       controlSizing,
+      isCompactFormFactor,
     ],
   );
 
@@ -2781,7 +2789,11 @@ const styles = StyleSheet.create((theme: Theme) => ({
     opacity: 0.5,
   },
   queueTrack: {
-    flexDirection: "column",
+    maxHeight: 112,
+    minHeight: 0,
+    flexShrink: 1,
+  },
+  queueTrackContent: {
     gap: theme.spacing[2],
   },
   queueItem: {

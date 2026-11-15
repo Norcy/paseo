@@ -141,14 +141,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === "object" && !Array.isArray(value);
 }
 
-function isArchivedCodexThreadResumeError(error: unknown, threadId: string): boolean {
-  if (!(error instanceof Error)) return false;
-  const expectedMessage =
-    `session ${threadId} is archived. ` +
-    `Run \`codex unarchive ${threadId}\` to unarchive it first.`;
-  return error.message === expectedMessage;
-}
-
 function isCodexAlreadyUnarchivedError(error: unknown, threadId: string): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(`no archived rollout found for thread id ${threadId}`);
@@ -1053,7 +1045,8 @@ async function readCodexThreadWindow(
   while (threads.size < window.limit) {
     const response = toObjectRecord(
       await client.request("thread/list", {
-        limit: window.limit - threads.size,
+        limit: Math.min(100, window.limit - threads.size),
+        sourceKinds: ["cli", "vscode", "appServer", "unknown"],
         // Rank the window by last use. Codex pages by creation time by default,
         // which drops an old conversation that is still being worked in.
         // Older Codex builds ignore the unknown key and keep that order.
@@ -4330,19 +4323,6 @@ export class CodexAppServerAgentSession implements AgentSession {
     } catch (error) {
       const threadId = this.currentThreadId;
       const message = error instanceof Error ? error.message : String(error);
-      if (isArchivedCodexThreadResumeError(error, threadId)) {
-        try {
-          await this.client.request("thread/unarchive", { threadId });
-        } catch (unarchiveError) {
-          if (!isCodexAlreadyUnarchivedError(unarchiveError, threadId)) {
-            throw unarchiveError;
-          }
-        }
-        const response = await this.client.request("thread/resume", params);
-        this.rememberResolvedSandboxPolicy(response);
-        this.logger.info({ threadId }, "Unarchived Codex thread to restore active Paseo agent");
-        return;
-      }
       this.logger.warn({ error, threadId }, "Failed to resume persisted Codex thread");
       throw new Error(`Failed to resume Codex thread ${threadId}: ${message}`, { cause: error });
     }
@@ -7967,8 +7947,8 @@ export class CodexAppServerAgentClient implements AgentClient {
     });
 
     try {
-      const limit = options?.limit ?? 20;
-      const scanLimit = Math.min(options?.scanLimit ?? limit, 500);
+      const limit = options?.all ? Number.MAX_SAFE_INTEGER : (options?.limit ?? 20);
+      const scanLimit = options?.all ? limit : Math.min(options?.scanLimit ?? limit, 500);
       // thread/list returns the cheap `cwd` field. Fetch a wider window when
       // filtering since most threads will be from other cwds, then keep the
       // local realpath-aware filter for symlink-equivalent workspace paths.
@@ -8097,6 +8077,42 @@ export class CodexAppServerAgentClient implements AgentClient {
       );
     } finally {
       context?.signal.removeEventListener("abort", handleAbort);
+      await dispose();
+    }
+  }
+
+  async listArchivedSessionIds(signal: AbortSignal): Promise<string[]> {
+    signal.throwIfAborted();
+    const client = await this.startAppServer({ signal });
+    let disposePromise: Promise<void> | undefined;
+    const dispose = () => (disposePromise ??= client.dispose());
+    const handleAbort = () => void dispose().catch(() => undefined);
+    signal.addEventListener("abort", handleAbort, { once: true });
+    try {
+      signal.throwIfAborted();
+      const ids = new Set<string>();
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const response = toObjectRecord(
+          await client.request("thread/list", {
+            archived: true,
+            modelProviders: [],
+            limit: 100,
+            ...(cursor ? { cursor } : {}),
+          }),
+        );
+        for (const thread of Array.isArray(response?.data) ? response.data : []) {
+          if (isRecord(thread) && typeof thread.id === "string") ids.add(thread.id);
+        }
+        cursor = typeof response?.nextCursor === "string" ? response.nextCursor : undefined;
+        if (cursor && cursors.has(cursor)) throw new Error("Codex archive cursor repeated");
+        if (cursor) cursors.add(cursor);
+      } while (cursor);
+      signal.throwIfAborted();
+      return [...ids];
+    } finally {
+      signal.removeEventListener("abort", handleAbort);
       await dispose();
     }
   }

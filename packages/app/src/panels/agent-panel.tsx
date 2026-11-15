@@ -1159,6 +1159,7 @@ const ChatAgentReadyContent = memo(function ChatAgentReadyContent({
       <AgentComposerSection
         agentId={agentId}
         serverId={serverId}
+        fullscreen={isComposerFullscreen}
         isPaneFocused={isPaneFocused}
         isArchivingCurrentAgent={isArchivingCurrentAgent}
         archivedAt={agentState.archivedAt}
@@ -1533,6 +1534,7 @@ function DraftComposerSection({
 const AgentComposerSection = memo(function AgentComposerSection({
   agentId,
   serverId,
+  fullscreen,
   isPaneFocused,
   isArchivingCurrentAgent,
   archivedAt,
@@ -1547,6 +1549,7 @@ const AgentComposerSection = memo(function AgentComposerSection({
 }: {
   agentId?: string;
   serverId: string;
+  fullscreen: boolean;
   isPaneFocused: boolean;
   isArchivingCurrentAgent: boolean;
   archivedAt: Date | null;
@@ -1573,6 +1576,7 @@ const AgentComposerSection = memo(function AgentComposerSection({
     <ActiveAgentComposer
       agentId={agentId}
       serverId={serverId}
+      fullscreen={fullscreen}
       isPaneFocused={isPaneFocused}
       cwd={cwd}
       isSubmitLoading={isSubmitLoading}
@@ -1589,6 +1593,7 @@ const AgentComposerSection = memo(function AgentComposerSection({
 function ActiveAgentComposer({
   agentId,
   serverId,
+  fullscreen,
   isPaneFocused,
   cwd,
   isSubmitLoading,
@@ -1601,6 +1606,7 @@ function ActiveAgentComposer({
 }: {
   agentId: string;
   serverId: string;
+  fullscreen: boolean;
   isPaneFocused: boolean;
   cwd: string;
   isSubmitLoading: boolean;
@@ -1685,7 +1691,13 @@ function ActiveAgentComposer({
   );
 
   return (
-    <View style={animatedStaticStyles.inputAreaWrapper} onLayout={onInputAreaLayout}>
+    <View
+      style={[
+        animatedStaticStyles.inputAreaWrapper,
+        isCompactFormFactor && !fullscreen && styles.mobileComposerArea,
+      ]}
+      onLayout={onInputAreaLayout}
+    >
       <Composer
         agentId={agentId}
         serverId={serverId}
@@ -1818,6 +1830,12 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: "center",
     paddingHorizontal: theme.spacing[4],
     paddingTop: theme.spacing[2],
+  },
+  mobileComposerArea: {
+    paddingTop: theme.spacing[2],
+    borderTopWidth: theme.borderWidth[1],
+    borderTopColor: theme.colors.border,
+    backgroundColor: theme.colors.surface0,
   },
   timelineSyncCalloutContent: {
     width: "100%",

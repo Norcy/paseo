@@ -438,6 +438,7 @@ export const ptBR: TranslationResources = {
     },
   },
   importSession: {
+    bulk: en.importSession.bulk,
     chooseHostTitle: en.importSession.chooseHostTitle,
     title: "Importar sessão",
     searchPlaceholder: "Buscar sessões...",
